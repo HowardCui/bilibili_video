@@ -8,9 +8,9 @@ from pathlib import Path
 
 import yt_dlp
 
-from get_metadata import get_video_metadata
+from video_processing.get_metadata import get_video_metadata
 
-SUBTITLE_DIR = Path("data/subtitles")
+SUBTITLE_DIR = Path("../data/subtitles")
 
 SUBTITLE_PRIORITY = [
     "ai-zh",
@@ -94,7 +94,7 @@ def _test():
     测试
     :return: Bilibili 视频链接
     '''
-    pathname = 'sample.json'
+    pathname ='../sample.json'
     with open(pathname, 'r', encoding='utf-8') as f:
         data = json.load(f)
     url = data.get('url')

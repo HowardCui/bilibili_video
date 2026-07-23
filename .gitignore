@@ -1,2 +1,9 @@
 config.json
 .idea
+.venv
+
+data/metadata/*
+data/subtitles/*
+data/transcripts/*
+
+__pycache__/

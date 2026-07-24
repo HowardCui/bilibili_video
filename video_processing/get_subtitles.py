@@ -38,7 +38,7 @@ def select_subtitle_language(subtitle_languages: list,):
             return language
     return None
 
-def download_subtitle(url: str,language: str,):
+def download_subtitle(url: str, language: str, raw_info=None):
     """
     下载指定语言的字幕。
 
@@ -65,12 +65,19 @@ def download_subtitle(url: str,language: str,):
     )
 
     with yt_dlp.YoutubeDL(subtitle_options) as ydl:
-        raw_info = ydl.extract_info(
-            url,
-            download=True,
-        )
+        if raw_info is None:
+            processed_info = ydl.extract_info(
+                url,
+                download=True,
+            )
+        else:
+            # 重新使用raw_info避免重新请求
+            processed_info = ydl.process_ie_result(
+                raw_info,
+                download=True,
+            )
 
-    video_id = raw_info.get("id")
+    video_id = processed_info.get("id")
 
     if not video_id:
         raise ValueError("没有获取到视频 ID")

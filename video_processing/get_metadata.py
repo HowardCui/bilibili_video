@@ -17,7 +17,7 @@ OPTIONS = {
     "writesubtitles": True,
 }
 
-def get_video_metadata(url: str):
+def get_video_metadata(url: str, return_raw_info: bool = False):
     """
     获取 Bilibili 视频基础信息。
     当前阶段只读取信息，不下载视频和字幕。
@@ -58,6 +58,9 @@ def get_video_metadata(url: str):
             automatic_captions.keys()
         ),
     }
+    if return_raw_info:
+        return metadata, raw_info
+
     return metadata
 
 def save_metadata(metadata: dict):

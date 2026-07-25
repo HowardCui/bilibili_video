@@ -8,7 +8,8 @@ from pathlib import Path
 
 import yt_dlp
 
-METADATA_DIR = Path("../data/metadata")
+BASE_DIR = Path(__file__).resolve().parent.parent
+METADATA_DIR = BASE_DIR / "data" / "metadata"
 OPTIONS = {
     "skip_download": True,
     "noplaylist": True,
@@ -100,7 +101,7 @@ def _test():
     测试
     :return: Bilibili 视频链接
     '''
-    pathname ='../sample.json'
+    pathname = BASE_DIR / "sample.json"
     with open(pathname, 'r', encoding='utf-8') as f:
         data = json.load(f)
     url = data.get('url')

@@ -7,7 +7,8 @@ import json
 import re
 from pathlib import Path
 
-TRANSCRIPT_DIR = Path("../data/transcripts")
+BASE_DIR = Path(__file__).resolve().parent.parent
+TRANSCRIPT_DIR = BASE_DIR / "data" / "transcripts"
 
 def timestamp_to_seconds(timestamp: str):
     """
@@ -158,7 +159,12 @@ def _test():
     测试
     :return:
     '''
-    subtitle_path = Path("../data/subtitles/BV1Ru6BBwEAn.ai-zh.srt")
+    subtitle_path = (
+        BASE_DIR
+        / "data"
+        / "subtitles"
+        / "BV1Ru6BBwEAn.ai-zh.srt"
+    )
     save_transcript(subtitle_path)
 
 if __name__ == '__main__':

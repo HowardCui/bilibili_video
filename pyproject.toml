@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bilibili-video-summary-agent"
+version = "0.0.6"
+description = "A Bilibili video summarization agent powered by Qwen."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+authors = [
+    { name = "Haowen Cui" },
+]
+keywords = [
+    "bilibili",
+    "video-summarization",
+    "qwen",
+    "langchain",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "langchain-core>=1.5.1,<2",
+    "langchain-openai>=1.4.1,<2",
+    "pydantic>=2.13.4,<3",
+    "python-dotenv>=1.2.2,<2",
+    "yt-dlp>=2026.7.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+    "pytest-cov>=6,<8",
+    "ruff>=0.12,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/HowardCui/summary_video"
+Repository = "https://github.com/HowardCui/summary_video"
+Issues = "https://github.com/HowardCui/summary_video/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "summarization*",
+    "video_processing*",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = [
+    "summarization",
+    "video_processing",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+]

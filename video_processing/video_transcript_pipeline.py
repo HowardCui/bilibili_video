@@ -3,11 +3,17 @@
 # time: 2026/07/23
 # name: Haowen Cui
 
-from get_metadata import get_video_metadata, save_metadata
-from get_subtitles import select_subtitle_language,download_subtitle
-from subtitle_parser import save_transcript
+from video_processing.get_metadata import get_video_metadata, save_metadata
+from video_processing.get_subtitles import (
+    download_subtitle,
+    select_subtitle_language,
+)
+from video_processing.subtitle_parser import save_transcript
 import json
 import time
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 def process_video(url: str):
     """
@@ -58,7 +64,7 @@ def process_video(url: str):
     }
 
 if __name__ == "__main__":
-    pathname='../sample.json'
+    pathname = BASE_DIR / "sample.json"
     with open(pathname, 'r', encoding='utf-8') as f:
         data=json.load(f)
     url=data.get('url')

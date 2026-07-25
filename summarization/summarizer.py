@@ -7,6 +7,8 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+import os
+from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -16,6 +18,8 @@ from summarization.transcript_splitter import split_transcript
 BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / "config.json"
 SUMMARY_DIR = BASE_DIR / "data" / "summaries"
+
+load_dotenv(BASE_DIR / ".env")
 
 PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
     [
@@ -171,12 +175,12 @@ def create_model():
     """
     config = load_config()
 
-    api_key = config.get("api_key")
+    api_key=os.environ.get("SUMMARY_VIDEO_API_KEY")
     model_name = config.get("model")
     base_url = config.get("base_url")
 
     if not api_key:
-        raise ValueError("config.json 中没有 api_key")
+        raise ValueError("环境变量 DASHSCOPE_API_KEY 未设置，请在项目根目录的 .env 中配置")
 
     if not model_name:
         raise ValueError("config.json 中没有 model")
@@ -580,7 +584,7 @@ if __name__ == "__main__":
     )
 
     transcript=load_transcript(transcript_path)
-    chunks=split_transcript(transcript["segments"],max_characters=500,)
+    chunks=split_transcript(transcript["segments"],max_characters=3000,)
 
     print(f"共分成 {len(chunks)} 段")
 

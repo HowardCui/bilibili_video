@@ -5,18 +5,33 @@
 
 import json
 from pathlib import Path
-
+import os
 import yt_dlp
+from yt_dlp.networking.impersonate import ImpersonateTarget
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 METADATA_DIR = BASE_DIR / "data" / "metadata"
-OPTIONS = {
-    "skip_download": True,
-    "noplaylist": True,
-    "verbose": True,
-    "cookiesfrombrowser": ("firefox",),
-    "writesubtitles": True,
-}
+
+
+def build_yt_dlp_options() -> dict:
+    options = {
+        "skip_download": True,
+        "noplaylist": True,
+        "verbose": True,
+        "writesubtitles": True,
+        "impersonate": ImpersonateTarget.from_str("firefox"),
+    }
+
+    cookie_file = os.getenv("BILIBILI_COOKIE_FILE")
+
+    if cookie_file:
+        options["cookiefile"] = cookie_file
+    else:
+        # 仅用于本地开发
+        options["cookiesfrombrowser"] = ("firefox",)
+
+    return options
+
 
 def get_video_metadata(url: str, return_raw_info: bool = False):
     """
@@ -27,9 +42,14 @@ def get_video_metadata(url: str, return_raw_info: bool = False):
     :return: 包含标题、作者、简介、时长和字幕信息的字典
     """
     try:
-        with yt_dlp.YoutubeDL(OPTIONS) as ydl:
-            raw_info = ydl.extract_info(url, download=False)
-            info = ydl.sanitize_info(raw_info)
+        options=build_yt_dlp_options()
+
+        with yt_dlp.YoutubeDL(options) as ydl:
+            raw_info=ydl.extract_info(
+                url,
+                download=False,
+            )
+            info=ydl.sanitize_info(raw_info)
     except Exception as e:
         print(f"Error extracting metadata: {e}")
         return None

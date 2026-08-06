@@ -14,6 +14,7 @@ from ranking_collector.config import API_URL, TOP_N
 
 
 DEFAULT_TIMEOUT = 15
+POPULAR_API_URL = "https://api.bilibili.com/x/web-interface/popular"
 
 REQUEST_HEADERS = {
     "Accept": (
@@ -80,34 +81,48 @@ def fetch_ranking(rid: int,limit: int = TOP_N,timeout: int = DEFAULT_TIMEOUT,):
     if isinstance(timeout, bool) or timeout <= 0:
         raise ValueError("timeout 必须大于 0")
 
-    try:
-        response = requests.get(
-            build_ranking_url(rid),
-            headers=REQUEST_HEADERS,
-            impersonate="firefox",
-            timeout=timeout,
-        )
-        response.raise_for_status()
-    except RequestException as error:
-        raise RankingClientError(
-            f"Bilibili 排行榜请求失败：{error}"
-        ) from error
+    request_urls = [build_ranking_url(rid)]
 
-    try:
-        payload = response.json()
-    except ValueError as error:
-        raise RankingClientError(
-            "Bilibili 排行榜返回了无效 JSON"
-        ) from error
+    if rid == 0:
+        popular_query = urlencode({"pn": 1, "ps": max(limit, TOP_N)})
+        request_urls.append(f"{POPULAR_API_URL}?{popular_query}")
 
-    if not isinstance(payload, dict):
-        raise RankingClientError(
-            "Bilibili 排行榜响应不是 JSON 对象"
-        )
+    for request_index, request_url in enumerate(request_urls):
+        try:
+            response = requests.get(
+                request_url,
+                headers=REQUEST_HEADERS,
+                impersonate="firefox",
+                timeout=timeout,
+            )
+            response.raise_for_status()
+        except RequestException as error:
+            raise RankingClientError(
+                f"Bilibili 排行榜请求失败：{error}"
+            ) from error
 
-    response_code = payload.get("code")
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise RankingClientError(
+                "Bilibili 排行榜返回了无效 JSON"
+            ) from error
 
-    if response_code != 0:
+        if not isinstance(payload, dict):
+            raise RankingClientError(
+                "Bilibili 排行榜响应不是 JSON 对象"
+            )
+
+        response_code = payload.get("code")
+
+        if response_code == 0:
+            break
+
+        has_fallback = request_index + 1 < len(request_urls)
+
+        if response_code == -352 and has_fallback:
+            continue
+
         message = payload.get("message") or "未知错误"
 
         raise RankingClientError(

@@ -27,6 +27,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "curl-cffi>=0.13,<1",
     "langchain-core>=1.5.1,<2",
     "langchain-openai>=1.4.1,<2",
     "pydantic>=2.13.4,<3",
@@ -49,6 +50,7 @@ Issues = "https://github.com/HowardCui/summary_video/issues"
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
+    "ranking_collector*",
     "summarization*",
     "video_processing*",
 ]
@@ -60,6 +62,7 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = [
+    "ranking_collector",
     "summarization",
     "video_processing",
 ]

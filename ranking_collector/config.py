@@ -3,6 +3,7 @@
 # time: 2026/07/24
 # name: Haowen Cui
 
+from datetime import timedelta, timezone
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -11,7 +12,7 @@ DATABASE_PATH = BASE_DIR / "data" / "ranking.db"
 
 API_URL = "https://api.bilibili.com/x/web-interface/ranking/v2"
 
-TIMEZONE = "Asia/Shanghai"
+TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 SCHEDULE_HOURS = (0, 6, 12, 18)
 

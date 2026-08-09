@@ -5,6 +5,8 @@
 
 """Bilibili 热门排行榜接口客户端。"""
 
+import random
+import time
 from urllib.parse import urlencode
 
 from curl_cffi import requests
@@ -14,6 +16,7 @@ from ranking_collector.config import API_URL, TOP_N
 
 
 DEFAULT_TIMEOUT = 15
+MAX_RISK_RETRIES = 3
 POPULAR_API_URL = "https://api.bilibili.com/x/web-interface/popular"
 
 REQUEST_HEADERS = {
@@ -25,6 +28,8 @@ REQUEST_HEADERS = {
         "zh-CN,zh;q=0.9,zh-TW;q=0.8,"
         "zh-HK;q=0.7,en-US;q=0.6,en;q=0.5"
     ),
+    "Origin": "https://www.bilibili.com",
+    "Referer": "https://www.bilibili.com/",
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-Site": "none",
@@ -87,44 +92,62 @@ def fetch_ranking(rid: int,limit: int = TOP_N,timeout: int = DEFAULT_TIMEOUT,):
         popular_query = urlencode({"pn": 1, "ps": max(limit, TOP_N)})
         request_urls.append(f"{POPULAR_API_URL}?{popular_query}")
 
+    request_succeeded = False
+
     for request_index, request_url in enumerate(request_urls):
-        try:
-            response = requests.get(
-                request_url,
-                headers=REQUEST_HEADERS,
-                impersonate="firefox",
-                timeout=timeout,
-            )
-            response.raise_for_status()
-        except RequestException as error:
-            raise RankingClientError(
-                f"Bilibili 排行榜请求失败：{error}"
-            ) from error
+        for retry_count in range(MAX_RISK_RETRIES + 1):
+            try:
+                response = requests.get(
+                    request_url,
+                    headers=REQUEST_HEADERS,
+                    impersonate="firefox",
+                    timeout=timeout,
+                )
+                response.raise_for_status()
+            except RequestException as error:
+                raise RankingClientError(
+                    f"Bilibili 排行榜请求失败：{error}"
+                ) from error
 
-        try:
-            payload = response.json()
-        except ValueError as error:
-            raise RankingClientError(
-                "Bilibili 排行榜返回了无效 JSON"
-            ) from error
+            try:
+                payload = response.json()
+            except ValueError as error:
+                raise RankingClientError(
+                    "Bilibili 排行榜返回了无效 JSON"
+                ) from error
 
-        if not isinstance(payload, dict):
-            raise RankingClientError(
-                "Bilibili 排行榜响应不是 JSON 对象"
-            )
+            if not isinstance(payload, dict):
+                raise RankingClientError(
+                    "Bilibili 排行榜响应不是 JSON 对象"
+                )
 
-        response_code = payload.get("code")
+            response_code = payload.get("code")
 
-        if response_code == 0:
+            if response_code == 0:
+                request_succeeded = True
+                break
+
+            if (
+                response_code == -352
+                and retry_count < MAX_RISK_RETRIES
+            ):
+                wait_seconds = (
+                    2 ** (retry_count + 1)
+                    + random.uniform(0, 1)
+                )
+                time.sleep(wait_seconds)
+                continue
+
+            break
+
+        if request_succeeded:
             break
 
         has_fallback = request_index + 1 < len(request_urls)
-
         if response_code == -352 and has_fallback:
             continue
 
         message = payload.get("message") or "未知错误"
-
         raise RankingClientError(
             f"Bilibili 排行榜接口错误："
             f"code={response_code}, message={message}"

@@ -226,6 +226,121 @@ class MetricChange:
         )
 
 
+class ComparisonStatus:
+    """快照比较的有效性状态。"""
+
+    NO_BASELINE = "NO_BASELINE"
+    VALID = "VALID"
+    STALE = "STALE"
+    EMPTY_CURRENT = "EMPTY_CURRENT"
+    VALUES = {NO_BASELINE, VALID, STALE, EMPTY_CURRENT}
+
+
+class ComparisonSource:
+    """快照比较的数据来源。"""
+
+    CURRENT = "CURRENT"
+    LAST_VALID = "LAST_VALID"
+    VALUES = {CURRENT, LAST_VALID}
+
+
+class SnapshotComparison:
+    """两份同分区榜单快照的实时比较结果。"""
+
+    def __init__(
+        self,
+        partition,
+        previous_collected_at,
+        current_collected_at,
+        elapsed_hours,
+        status,
+        source,
+        retained,
+        entered,
+        exited,
+        metric_changes,
+        ranking_risers,
+        views_growth_ranking,
+        turnover_rate,
+    ):
+        self.partition = validate_text(partition, "partition")
+        self.current_collected_at = validate_datetime(
+            current_collected_at, "current_collected_at"
+        )
+        if previous_collected_at is not None:
+            previous_collected_at = validate_datetime(
+                previous_collected_at, "previous_collected_at"
+            )
+        self.previous_collected_at = previous_collected_at
+
+        if status not in ComparisonStatus.VALUES:
+            raise ValueError("status 不是有效的比较状态")
+        if source not in ComparisonSource.VALUES:
+            raise ValueError("source 不是有效的比较来源")
+        self.status = status
+        self.source = source
+
+        if elapsed_hours is not None:
+            if (
+                not isinstance(elapsed_hours, (int, float))
+                or isinstance(elapsed_hours, bool)
+            ):
+                raise TypeError("elapsed_hours 必须是数字或 None")
+            if not isfinite(elapsed_hours) or elapsed_hours <= 0:
+                raise ValueError("elapsed_hours 必须是大于 0 的有限数值")
+        self.elapsed_hours = elapsed_hours
+
+        self.retained = self._validate_items(retained, RankingItem, "retained")
+        self.entered = self._validate_items(entered, RankingItem, "entered")
+        self.exited = self._validate_items(exited, RankingItem, "exited")
+        self.metric_changes = self._validate_items(
+            metric_changes, MetricChange, "metric_changes"
+        )
+        self.ranking_risers = self._validate_items(
+            ranking_risers, MetricChange, "ranking_risers"
+        )
+        self.views_growth_ranking = self._validate_items(
+            views_growth_ranking, MetricChange, "views_growth_ranking"
+        )
+
+        if turnover_rate is not None:
+            if (
+                not isinstance(turnover_rate, (int, float))
+                or isinstance(turnover_rate, bool)
+            ):
+                raise TypeError("turnover_rate 必须是数字或 None")
+            if not isfinite(turnover_rate) or not 0 <= turnover_rate <= 1:
+                raise ValueError("turnover_rate 必须在 0 到 1 之间")
+        if status == ComparisonStatus.VALID and turnover_rate is None:
+            raise ValueError("VALID 比较必须包含 turnover_rate")
+        if status != ComparisonStatus.VALID and turnover_rate is not None:
+            raise ValueError("只有 VALID 比较可以包含 turnover_rate")
+        if status == ComparisonStatus.NO_BASELINE:
+            if previous_collected_at is not None or elapsed_hours is not None:
+                raise ValueError("NO_BASELINE 不能包含上一份快照时间")
+        elif status in {ComparisonStatus.VALID, ComparisonStatus.STALE}:
+            if previous_collected_at is None or elapsed_hours is None:
+                raise ValueError("该比较状态必须包含上一份快照和时间间隔")
+        elif (
+            previous_collected_at is None
+            and elapsed_hours is not None
+        ) or (
+            previous_collected_at is not None
+            and elapsed_hours is None
+        ):
+            raise ValueError("上一份快照时间和时间间隔必须同时存在")
+
+        self.turnover_rate = turnover_rate
+
+    def _validate_items(self, value, item_type, field_name):
+        if not isinstance(value, (list, tuple)):
+            raise TypeError(f"{field_name} 必须是列表或元组")
+        result = list(value)
+        if any(not isinstance(item, item_type) for item in result):
+            raise TypeError(f"{field_name} 包含无效项目")
+        return result
+
+
 class CollectionResult:
     """单个分区的一次采集结果。"""
 
@@ -355,10 +470,13 @@ def collection_failure(partition, collected_at, error_message):
 
 
 __all__ = [
+    "ComparisonSource",
+    "ComparisonStatus",
     "CollectionResult",
     "MetricChange",
     "RankingItem",
     "RankingSnapshot",
+    "SnapshotComparison",
     "VideoInfo",
     "VideoMetrics",
     "collection_failure",

@@ -6,3 +6,5 @@ config.json
 data/
 
 __pycache__/
+
+.secrets/

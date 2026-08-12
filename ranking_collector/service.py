@@ -12,11 +12,15 @@ from ranking_collector.config import (
     PARTITIONS,
     TIMEZONE,
     TOP_N,
+    TURNOVER_MAX_HOURS,
 )
 from ranking_collector.models import (
+    ComparisonSource,
+    ComparisonStatus,
     MetricChange,
     RankingItem,
     RankingSnapshot,
+    SnapshotComparison,
     collection_failure,
     collection_success,
     ranking_item_from_bilibili,
@@ -26,6 +30,7 @@ from ranking_collector.repository import (
     create_collection_run,
     finish_collection_run,
     get_latest_successful_snapshot,
+    get_recent_successful_snapshots,
     initialize_database,
     save_snapshot,
 )
@@ -35,8 +40,8 @@ class CollectionServiceError(RuntimeError):
     """整轮采集没有全部成功。"""
 
 
-PARTITION_DELAY_MIN_SECONDS = 1.5
-PARTITION_DELAY_MAX_SECONDS = 3.0
+PARTITION_DELAY_MIN_SECONDS = 8.0
+PARTITION_DELAY_MAX_SECONDS = 15.0
 
 
 def wait_between_partitions():
@@ -128,32 +133,137 @@ def calculate_metric_change(previous_item, current_item):
     )
 
 
-def calculate_snapshot_changes(previous_snapshot, current_snapshot):
-    """比较同一分区的两份快照，只返回两次都出现的视频。"""
-    if previous_snapshot is None:
-        return []
-    if not isinstance(previous_snapshot, RankingSnapshot):
-        raise TypeError("previous_snapshot 必须是 RankingSnapshot")
+def compare_snapshots(
+    previous_snapshot,
+    current_snapshot,
+    turnover_max_hours=TURNOVER_MAX_HOURS,
+    source=ComparisonSource.CURRENT,
+):
+    """实时比较同一分区的前后两份榜单快照。"""
     if not isinstance(current_snapshot, RankingSnapshot):
         raise TypeError("current_snapshot 必须是 RankingSnapshot")
+
+    if previous_snapshot is None:
+        status = (
+            ComparisonStatus.EMPTY_CURRENT
+            if not current_snapshot.items
+            else ComparisonStatus.NO_BASELINE
+        )
+        return SnapshotComparison(
+            partition=current_snapshot.partition,
+            previous_collected_at=None,
+            current_collected_at=current_snapshot.collected_at,
+            elapsed_hours=None,
+            status=status,
+            source=source,
+            retained=[],
+            entered=[],
+            exited=[],
+            metric_changes=[],
+            ranking_risers=[],
+            views_growth_ranking=[],
+            turnover_rate=None,
+        )
+
+    if not isinstance(previous_snapshot, RankingSnapshot):
+        raise TypeError("previous_snapshot 必须是 RankingSnapshot")
     if previous_snapshot.partition != current_snapshot.partition:
         raise ValueError("只能比较同一分区的快照")
+
+    elapsed_hours = (
+        current_snapshot.collected_at - previous_snapshot.collected_at
+    ).total_seconds() / 3600
+    if elapsed_hours <= 0:
+        raise ValueError("当前快照时间必须晚于上一份快照")
+
+    if not current_snapshot.items:
+        return SnapshotComparison(
+            partition=current_snapshot.partition,
+            previous_collected_at=previous_snapshot.collected_at,
+            current_collected_at=current_snapshot.collected_at,
+            elapsed_hours=elapsed_hours,
+            status=ComparisonStatus.EMPTY_CURRENT,
+            source=source,
+            retained=[],
+            entered=[],
+            exited=[],
+            metric_changes=[],
+            ranking_risers=[],
+            views_growth_ranking=[],
+            turnover_rate=None,
+        )
 
     previous_items = {
         item.video.bvid: item
         for item in previous_snapshot.items
     }
+    current_items = {
+        item.video.bvid: item for item in current_snapshot.items
+    }
+    retained = []
+    entered = []
     changes = []
 
     for current_item in current_snapshot.items:
         previous_item = previous_items.get(current_item.video.bvid)
         if previous_item is None:
+            entered.append(current_item)
             continue
+        retained.append(current_item)
         changes.append(
             calculate_metric_change(previous_item, current_item)
         )
 
-    return changes
+    exited = [
+        item
+        for item in previous_snapshot.items
+        if item.video.bvid not in current_items
+    ]
+    current_ranks = {item.video.bvid: item.rank for item in retained}
+    ranking_risers = sorted(
+        (change for change in changes if change.rank_change > 0),
+        key=lambda change: (
+            -change.rank_change,
+            current_ranks[change.bvid],
+        ),
+    )
+    views_growth_ranking = sorted(
+        changes,
+        key=lambda change: (
+            -change.views_per_hour,
+            current_ranks[change.bvid],
+        ),
+    )
+
+    if elapsed_hours <= turnover_max_hours:
+        status = ComparisonStatus.VALID
+        turnover_rate = len(entered) / len(current_snapshot.items)
+    else:
+        status = ComparisonStatus.STALE
+        turnover_rate = None
+
+    return SnapshotComparison(
+        partition=current_snapshot.partition,
+        previous_collected_at=previous_snapshot.collected_at,
+        current_collected_at=current_snapshot.collected_at,
+        elapsed_hours=elapsed_hours,
+        status=status,
+        source=source,
+        retained=retained,
+        entered=entered,
+        exited=exited,
+        metric_changes=changes,
+        ranking_risers=ranking_risers,
+        views_growth_ranking=views_growth_ranking,
+        turnover_rate=turnover_rate,
+    )
+
+
+def calculate_snapshot_changes(previous_snapshot, current_snapshot):
+    """兼容旧调用方，仅返回持续在榜视频的指标变化。"""
+    return compare_snapshots(
+        previous_snapshot, current_snapshot
+    ).metric_changes
 
 
 def build_snapshot(raw_items, partition_name, collected_at):
@@ -238,7 +348,7 @@ def collect_once(
                 snapshot=snapshot,
                 database_path=database_path,
             )
-            changes = calculate_snapshot_changes(
+            comparison = compare_snapshots(
                 previous_snapshot,
                 snapshot,
             )
@@ -251,7 +361,22 @@ def collect_once(
                 error_message=error_message,
             )
             previous_snapshot = None
-            changes = []
+            comparison = None
+            try:
+                recent_snapshots = get_recent_successful_snapshots(
+                    partition=partition_name,
+                    limit=2,
+                    before=collected_at,
+                    database_path=database_path,
+                )
+                if len(recent_snapshots) == 2:
+                    comparison = compare_snapshots(
+                        recent_snapshots[1],
+                        recent_snapshots[0],
+                        source=ComparisonSource.LAST_VALID,
+                    )
+            except Exception:
+                comparison = None
             failure_messages.append(
                 f"{partition_name}: {error_message}"
             )
@@ -263,7 +388,7 @@ def collect_once(
                 "rid": partition["rid"],
                 "result": result,
                 "previous_snapshot": previous_snapshot,
-                "changes": changes,
+                "comparison": comparison,
             }
         )
 
@@ -339,6 +464,7 @@ __all__ = [
     "build_snapshot",
     "calculate_metric_change",
     "calculate_snapshot_changes",
+    "compare_snapshots",
     "collect_once",
     "get_enabled_partitions",
     "get_last_success_at",

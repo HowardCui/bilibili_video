@@ -16,7 +16,9 @@ TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 SCHEDULE_HOURS = (0, 6, 12, 18)
 
-TOP_N = 10
+TOP_N = 100
+
+TURNOVER_MAX_HOURS = 24
 
 PARTITIONS = {
     "all": {

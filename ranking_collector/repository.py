@@ -316,6 +316,43 @@ def get_latest_successful_snapshot(
         return load_snapshot(connection, snapshot_row)
 
 
+def get_recent_successful_snapshots(
+    partition,
+    limit=2,
+    before=None,
+    database_path=DATABASE_PATH,
+):
+    """按时间倒序读取指定分区最近若干份完整快照。"""
+    validate_text(partition, "partition")
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise TypeError("limit 必须是整数")
+    if limit < 1:
+        raise ValueError("limit 必须大于 0")
+
+    parameters = [partition]
+    time_condition = ""
+    if before is not None:
+        time_condition = "AND collected_at < ?"
+        parameters.append(datetime_to_text(before))
+    parameters.append(limit)
+
+    with connect_database(database_path) as connection:
+        snapshot_rows = connection.execute(
+            f"""
+            SELECT id, partition, collected_at
+            FROM ranking_snapshots
+            WHERE partition = ? {time_condition}
+            ORDER BY collected_at DESC, id DESC
+            LIMIT ?
+            """,
+            parameters,
+        ).fetchall()
+        return [
+            load_snapshot(connection, snapshot_row)
+            for snapshot_row in snapshot_rows
+        ]
+
+
 def get_video_history(bvid, database_path=DATABASE_PATH):
     """按采集时间顺序查询某个视频的全部历史指标。"""
     validate_text(bvid, "bvid")
@@ -406,6 +443,7 @@ __all__ = [
     "finish_collection_run",
     "get_latest_successful_snapshot",
     "get_metric_change",
+    "get_recent_successful_snapshots",
     "get_video_history",
     "initialize_database",
     "save_snapshot",

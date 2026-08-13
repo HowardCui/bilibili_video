@@ -32,7 +32,8 @@ from ranking_collector.repository import (
     get_latest_successful_snapshot,
     get_recent_successful_snapshots,
     initialize_database,
-    save_snapshot,
+    record_partition_collection_result,
+    save_successful_partition_snapshot,
 )
 
 
@@ -343,7 +344,7 @@ def collect_once(
                 partition_name=partition_name,
                 collected_at=collected_at,
             )
-            save_snapshot(
+            save_successful_partition_snapshot(
                 run_id=run_id,
                 snapshot=snapshot,
                 database_path=database_path,
@@ -391,6 +392,15 @@ def collect_once(
                 "comparison": comparison,
             }
         )
+        if not result.succeeded:
+            record_partition_collection_result(
+                run_id=run_id,
+                partition=partition_name,
+                collected_at=collected_at,
+                succeeded=False,
+                error_message="Collection failed",
+                database_path=database_path,
+            )
 
         if partition_index + 1 < partition_count:
             wait_between_partitions()

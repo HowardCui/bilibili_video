@@ -1,7 +1,11 @@
 #!/usr/bin/env python 3.12
 # -*- coding: utf-8 -*-
-# time: 2026/07/23
-# name: Haowen Cui
+
+"""Metadata, subtitle, and transcript processing for one Bilibili video."""
+
+import json
+import time
+from pathlib import Path
 
 from video_processing.get_metadata import get_video_metadata, save_metadata
 from video_processing.get_subtitles import (
@@ -9,52 +13,61 @@ from video_processing.get_subtitles import (
     select_subtitle_language,
 )
 from video_processing.subtitle_parser import save_transcript
-import json
-import time
-from pathlib import Path
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-def process_video(url: str):
-    """
-    执行单个 Bilibili 视频的文字稿处理流程。
 
-    :param url: Bilibili 视频链接
-    :return: 各阶段生成的文件路径
-    """
-    start_time=time.perf_counter()
-    print("正在获取视频元数据")
-    extraction_result = get_video_metadata(
-        url,
-        return_raw_info=True,
-    )
+class VideoUnavailableError(RuntimeError):
+    """Raised when video metadata cannot be obtained."""
+
+
+class NoChineseSubtitleError(RuntimeError):
+    """Raised when a video has no supported Chinese subtitle."""
+
+
+def _report_stage(progress_callback, stage: str) -> None:
+    if progress_callback is not None:
+        progress_callback(stage)
+
+
+def process_video(url: str, progress_callback=None):
+    """Create metadata, subtitle, and transcript artifacts for ``url``."""
+    start_time = time.perf_counter()
+
+    print("Retrieving video metadata")
+    _report_stage(progress_callback, "METADATA")
+    extraction_result = get_video_metadata(url, return_raw_info=True)
     if extraction_result is None:
-        raise RuntimeError("视频元数据获取失败")
+        raise VideoUnavailableError("video metadata could not be retrieved")
 
     metadata, raw_info = extraction_result
     metadata_path = save_metadata(metadata)
 
+    _report_stage(progress_callback, "SUBTITLE")
     subtitle_language = select_subtitle_language(
         metadata.get("subtitle_languages", [])
     )
-
     if subtitle_language is None:
-        raise RuntimeError("该视频没有可用的中文字幕")
-    #后续可能会添加音频转化方案获取字幕
+        raise NoChineseSubtitleError("no supported Chinese subtitle is available")
 
-    print("正在获取视频字幕")
-    subtitle_path = download_subtitle(
-        url=url,
-        language=subtitle_language,
-        raw_info=raw_info,
-    )
+    print("Retrieving video subtitle")
+    try:
+        subtitle_path = download_subtitle(
+            url=url,
+            language=subtitle_language,
+            raw_info=raw_info,
+        )
+    except Exception as error:
+        raise NoChineseSubtitleError(
+            "the advertised Chinese subtitle could not be retrieved"
+        ) from error
 
+    _report_stage(progress_callback, "TRANSCRIPT")
     transcript_path = save_transcript(subtitle_path=subtitle_path)
 
-    end_time=time.perf_counter()
-    elapsed_time=end_time - start_time
-
-    print(f"获取完整视频信息耗时：{elapsed_time:.2f} 秒")
+    elapsed_time = time.perf_counter() - start_time
+    print(f"Video processing completed in {elapsed_time:.2f} seconds")
 
     return {
         "video_id": metadata["video_id"],
@@ -63,9 +76,9 @@ def process_video(url: str):
         "transcript_path": transcript_path,
     }
 
+
 if __name__ == "__main__":
     pathname = BASE_DIR / "sample.json"
-    with open(pathname, 'r', encoding='utf-8') as f:
-        data=json.load(f)
-    url=data.get('url')
-    process_video(url)
+    with pathname.open(encoding="utf-8") as file:
+        data = json.load(file)
+    process_video(data.get("url"))

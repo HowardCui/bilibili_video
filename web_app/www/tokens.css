@@ -1,0 +1,73 @@
+:root {
+  color-scheme: dark;
+
+  --color-canvas: #ee7130;
+  --color-canvas-deep: #cf5424;
+  --color-canvas-glow: #ffad59;
+  --color-shell: #1b1917;
+  --color-navigation: #12110f;
+  --color-panel: #24211e;
+  --color-panel-raised: #2c2824;
+  --color-panel-soft: #332e29;
+  --color-panel-hover: #3a332c;
+  --color-border: rgba(255, 239, 222, 0.11);
+  --color-border-strong: rgba(255, 239, 222, 0.2);
+  --color-text: #fff8ef;
+  --color-text-secondary: #d1c5b9;
+  --color-text-muted: #9f9489;
+  --color-primary: #ff7a2f;
+  --color-primary-hover: #ff9356;
+  --color-primary-soft: rgba(255, 122, 47, 0.14);
+  --color-primary-border: rgba(255, 122, 47, 0.28);
+  --color-brand-border: rgba(255, 122, 47, 0.34);
+  --color-gold: #f2c85b;
+  --color-gold-soft: rgba(242, 200, 91, 0.14);
+  --color-gold-transparent: rgba(242, 200, 91, 0);
+  --color-success: #59c98a;
+  --color-success-soft: rgba(89, 201, 138, 0.14);
+  --color-failure: #ff654f;
+  --color-failure-soft: rgba(255, 101, 79, 0.14);
+  --color-failure-border: rgba(255, 101, 79, 0.35);
+  --color-info: #82b8ff;
+  --color-white-soft: rgba(255, 255, 255, 0.06);
+  --color-black-soft: rgba(7, 6, 5, 0.3);
+  --color-black-strong: rgba(7, 6, 5, 0.62);
+  --color-navigation-glass: rgba(18, 17, 15, 0.94);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  --shadow-canvas: 0 28px 72px rgba(80, 24, 4, 0.32);
+  --shadow-panel: 0 18px 36px rgba(7, 6, 5, 0.2);
+  --shadow-control: 0 8px 20px rgba(7, 6, 5, 0.24);
+  --shadow-brand: 0 10px 24px rgba(238, 113, 48, 0.24);
+  --focus-ring: 0 0 0 3px rgba(242, 200, 91, 0.48);
+
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 520ms;
+  --motion-breathe: 1800ms;
+  --motion-spin: 900ms;
+  --motion-shake: 460ms;
+  --ease-standard: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-sans: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}

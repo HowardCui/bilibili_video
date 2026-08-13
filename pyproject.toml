@@ -32,6 +32,7 @@ dependencies = [
     "langchain-openai>=1.4.1,<2",
     "pydantic>=2.13.4,<3",
     "python-dotenv>=1.2.2,<2",
+    "shiny>=1.4,<2",
     "yt-dlp>=2026.7.4",
 ]
 
@@ -53,7 +54,11 @@ include = [
     "ranking_collector*",
     "summarization*",
     "video_processing*",
+    "web_app*",
 ]
+
+[tool.setuptools.package-data]
+web_app = ["www/*.css"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -65,6 +70,7 @@ source = [
     "ranking_collector",
     "summarization",
     "video_processing",
+    "web_app",
 ]
 
 [tool.coverage.report]

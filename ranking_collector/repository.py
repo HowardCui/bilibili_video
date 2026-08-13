@@ -7,7 +7,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ranking_collector.config import DATABASE_PATH
+from ranking_collector.config import DATABASE_PATH, PARTITIONS
 from ranking_collector.models import (
     MetricChange,
     RankingItem,
@@ -37,6 +37,21 @@ CREATE TABLE IF NOT EXISTS ranking_snapshots (
     UNIQUE (run_id, partition)
 );
 
+CREATE TABLE IF NOT EXISTS collection_partition_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    partition TEXT NOT NULL,
+    collected_at TEXT NOT NULL,
+    succeeded INTEGER NOT NULL CHECK (succeeded IN (0, 1)),
+    error_message TEXT,
+    FOREIGN KEY (run_id) REFERENCES collection_runs(id) ON DELETE CASCADE,
+    UNIQUE (run_id, partition),
+    CHECK (
+        (succeeded = 1 AND error_message IS NULL)
+        OR (succeeded = 0 AND error_message IS NOT NULL)
+    )
+);
+
 CREATE TABLE IF NOT EXISTS ranking_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL,
@@ -62,6 +77,9 @@ CREATE TABLE IF NOT EXISTS ranking_items (
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_partition_time
     ON ranking_snapshots(partition, collected_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_partition_results_partition_time
+    ON collection_partition_results(partition, collected_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_items_bvid_time
     ON ranking_items(bvid, collected_at DESC);
@@ -161,6 +179,59 @@ def finish_collection_run(
             raise RepositoryError("采集任务不存在或已经结束")
 
 
+def record_partition_collection_result(
+    run_id: int,
+    partition: str,
+    collected_at: datetime,
+    succeeded: bool,
+    error_message: str | None = None,
+    database_path: str | Path = DATABASE_PATH,
+) -> None:
+    """Persist one partition's completed collection outcome for a run."""
+    if not isinstance(run_id, int) or isinstance(run_id, bool):
+        raise TypeError("run_id must be an integer")
+    if run_id < 1:
+        raise ValueError("run_id must be greater than 0")
+    validate_text(partition, "partition")
+    collected_at_text = datetime_to_text(collected_at)
+    if not isinstance(succeeded, bool):
+        raise TypeError("succeeded must be a boolean")
+    if succeeded:
+        if error_message is not None:
+            raise ValueError("successful results cannot include error_message")
+    else:
+        validate_text(error_message, "error_message")
+
+    with connect_database(database_path) as connection:
+        run = connection.execute(
+            "SELECT succeeded FROM collection_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
+        if run is None:
+            raise RepositoryError("collection run does not exist")
+        if run["succeeded"] is not None:
+            raise RepositoryError("collection run has already finished")
+        try:
+            connection.execute(
+                """
+                INSERT INTO collection_partition_results (
+                    run_id, partition, collected_at, succeeded, error_message
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    partition,
+                    collected_at_text,
+                    int(succeeded),
+                    error_message,
+                ),
+            )
+        except sqlite3.IntegrityError as error:
+            raise RepositoryError(
+                f"partition collection result save failed: {error}"
+            ) from error
+
+
 def save_snapshot(run_id, snapshot, database_path=DATABASE_PATH):
     """在一个事务中保存快照及其全部榜单条目。"""
     if not isinstance(run_id, int) or isinstance(run_id, bool):
@@ -240,6 +311,81 @@ def save_snapshot(run_id, snapshot, database_path=DATABASE_PATH):
         raise RepositoryError(f"快照保存失败：{error}") from error
 
 
+def save_successful_partition_snapshot(
+    run_id: int,
+    snapshot: RankingSnapshot,
+    database_path: str | Path = DATABASE_PATH,
+) -> int:
+    """Atomically save a partition snapshot and its successful outcome."""
+    if not isinstance(run_id, int) or isinstance(run_id, bool):
+        raise TypeError("run_id must be an integer")
+    if run_id < 1:
+        raise ValueError("run_id must be greater than 0")
+    if not isinstance(snapshot, RankingSnapshot):
+        raise TypeError("snapshot must be a RankingSnapshot")
+
+    collected_at_text = datetime_to_text(snapshot.collected_at)
+    try:
+        with connect_database(database_path) as connection:
+            run = connection.execute(
+                "SELECT succeeded FROM collection_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+            if run is None:
+                raise RepositoryError("collection run does not exist")
+            if run["succeeded"] is not None:
+                raise RepositoryError("collection run has already finished")
+
+            cursor = connection.execute(
+                """
+                INSERT INTO ranking_snapshots (run_id, partition, collected_at)
+                VALUES (?, ?, ?)
+                """,
+                (run_id, snapshot.partition, collected_at_text),
+            )
+            snapshot_id = cursor.lastrowid
+            for item in snapshot.items:
+                connection.execute(
+                    """
+                    INSERT INTO ranking_items (
+                        snapshot_id, bvid, title, uploader, partition,
+                        published_at, rank, views, likes, coins, favorites,
+                        comments, danmaku, shares, collected_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        snapshot_id,
+                        item.video.bvid,
+                        item.video.title,
+                        item.video.uploader,
+                        item.video.partition,
+                        datetime_to_text(item.video.published_at),
+                        item.rank,
+                        item.metrics.views,
+                        item.metrics.likes,
+                        item.metrics.coins,
+                        item.metrics.favorites,
+                        item.metrics.comments,
+                        item.metrics.danmaku,
+                        item.metrics.shares,
+                        datetime_to_text(item.collected_at),
+                    ),
+                )
+            connection.execute(
+                """
+                INSERT INTO collection_partition_results (
+                    run_id, partition, collected_at, succeeded, error_message
+                ) VALUES (?, ?, ?, 1, NULL)
+                """,
+                (run_id, snapshot.partition, collected_at_text),
+            )
+            return snapshot_id
+    except sqlite3.IntegrityError as error:
+        raise RepositoryError(
+            f"successful partition save failed: {error}"
+        ) from error
+
+
 def row_to_ranking_item(row):
     """把一条数据库记录还原成 RankingItem。"""
     video = VideoInfo(
@@ -283,6 +429,143 @@ def load_snapshot(connection, snapshot_row):
         collected_at=text_to_datetime(snapshot_row["collected_at"]),
         items=items,
     )
+
+
+def get_enabled_partition_names() -> list[str]:
+    """Return the configured names for enabled ranking partitions."""
+    return [
+        partition["name"]
+        for partition in PARTITIONS.values()
+        if partition.get("enabled", False)
+    ]
+
+
+def validate_enabled_partition(partition: str) -> str:
+    """Require a configured enabled partition before a web-facing query."""
+    validate_text(partition, "partition")
+    if partition not in get_enabled_partition_names():
+        raise ValueError("partition is not enabled")
+    return partition
+
+
+def validate_snapshot_id(snapshot_id: int) -> int:
+    """Require a positive SQLite snapshot identifier."""
+    if not isinstance(snapshot_id, int) or isinstance(snapshot_id, bool):
+        raise TypeError("snapshot_id must be an integer")
+    if snapshot_id < 1:
+        raise ValueError("snapshot_id must be greater than 0")
+    return snapshot_id
+
+
+def list_snapshot_summaries(
+    partition: str,
+    limit: int = 20,
+    database_path: str | Path = DATABASE_PATH,
+) -> list[dict[str, object]]:
+    """Return newest-first, page-safe summaries for one enabled partition."""
+    validate_enabled_partition(partition)
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise TypeError("limit must be an integer")
+    if limit < 1:
+        raise ValueError("limit must be greater than 0")
+
+    with connect_database(database_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                ranking_snapshots.id,
+                ranking_snapshots.partition,
+                ranking_snapshots.collected_at,
+                COUNT(ranking_items.id) AS item_count
+            FROM ranking_snapshots
+            LEFT JOIN ranking_items
+                ON ranking_items.snapshot_id = ranking_snapshots.id
+            WHERE ranking_snapshots.partition = ?
+            GROUP BY ranking_snapshots.id
+            ORDER BY ranking_snapshots.collected_at DESC,
+                     ranking_snapshots.id DESC
+            LIMIT ?
+            """,
+            (partition, limit),
+        ).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "partition": row["partition"],
+            "collected_at": row["collected_at"],
+            "item_count": row["item_count"],
+        }
+        for row in rows
+    ]
+
+
+def get_snapshot_by_id(
+    snapshot_id: int,
+    database_path: str | Path = DATABASE_PATH,
+) -> RankingSnapshot | None:
+    """Return one complete snapshot by its exact identifier, if it exists."""
+    validate_snapshot_id(snapshot_id)
+
+    with connect_database(database_path) as connection:
+        snapshot_row = connection.execute(
+            """
+            SELECT id, partition, collected_at
+            FROM ranking_snapshots
+            WHERE id = ?
+            """,
+            (snapshot_id,),
+        ).fetchone()
+        if snapshot_row is None:
+            return None
+        return load_snapshot(connection, snapshot_row)
+
+
+def get_ranking_page_context(
+    partition: str,
+    database_path: str | Path = DATABASE_PATH,
+) -> dict[str, object]:
+    """Read a partition outcome and its two latest snapshots atomically."""
+    validate_enabled_partition(partition)
+
+    with connect_database(database_path) as connection:
+        connection.execute("BEGIN")
+        collection_row = connection.execute(
+            """
+            SELECT partition, collected_at, succeeded, error_message
+            FROM collection_partition_results
+            WHERE partition = ?
+            ORDER BY collected_at DESC, run_id DESC
+            LIMIT 1
+            """,
+            (partition,),
+        ).fetchone()
+        snapshot_rows = connection.execute(
+            """
+            SELECT id, partition, collected_at
+            FROM ranking_snapshots
+            WHERE partition = ?
+            ORDER BY collected_at DESC, id DESC
+            LIMIT 2
+            """,
+            (partition,),
+        ).fetchall()
+        collection_result = None
+        if collection_row is not None:
+            collection_result = {
+                "partition": collection_row["partition"],
+                "collected_at": text_to_datetime(
+                    collection_row["collected_at"]
+                ),
+                "succeeded": bool(collection_row["succeeded"]),
+                "error_message": collection_row["error_message"],
+            }
+        return {
+            "collection_result": collection_result,
+            "snapshots": [
+                load_snapshot(connection, snapshot_row)
+                for snapshot_row in snapshot_rows
+            ],
+        }
 
 
 def get_latest_successful_snapshot(
@@ -441,10 +724,16 @@ __all__ = [
     "connect_database",
     "create_collection_run",
     "finish_collection_run",
+    "get_enabled_partition_names",
     "get_latest_successful_snapshot",
     "get_metric_change",
+    "get_ranking_page_context",
     "get_recent_successful_snapshots",
+    "get_snapshot_by_id",
     "get_video_history",
     "initialize_database",
+    "list_snapshot_summaries",
+    "record_partition_collection_result",
     "save_snapshot",
+    "save_successful_partition_snapshot",
 ]

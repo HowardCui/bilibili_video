@@ -6,5 +6,11 @@ config.json
 data/
 
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+*.egg-info/
 
 .secrets/

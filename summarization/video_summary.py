@@ -7,6 +7,7 @@ import json
 import time
 from pathlib import Path
 
+from summarization.errors import ModelUnavailableError, SummaryFailedError
 from summarization.summarizer import (
     load_transcript,
     merge_chunk_summaries,
@@ -19,7 +20,43 @@ from video_processing.video_transcript_pipeline import process_video
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def summarize_bilibili_video(url: str,max_characters: int = 3000,max_workers: int = 4,):
+def _report_stage(progress_callback, stage: str) -> None:
+    if progress_callback is not None:
+        progress_callback(stage)
+
+
+def _is_model_unavailable(error: Exception) -> bool:
+    if isinstance(error, (ConnectionError, TimeoutError)):
+        return True
+
+    message = str(error).lower()
+    model_markers = (
+        "api key",
+        "authentication",
+        "authorization",
+        "connection",
+        "credential",
+        "dashscope",
+        "model unavailable",
+        "openai",
+        "rate limit",
+        "timeout",
+    )
+    return any(marker in message for marker in model_markers)
+
+
+def _summary_error(error: Exception) -> RuntimeError:
+    if _is_model_unavailable(error):
+        return ModelUnavailableError("summary model is unavailable")
+    return SummaryFailedError("summary processing failed")
+
+
+def summarize_bilibili_video(
+    url: str,
+    max_characters: int = 3000,
+    max_workers: int = 4,
+    progress_callback=None,
+):
     """
     执行普通用户使用的 Bilibili 视频总结完整链路。
 
@@ -39,23 +76,34 @@ def summarize_bilibili_video(url: str,max_characters: int = 3000,max_workers: in
 
     start_time = time.perf_counter()
 
-    processing_result = process_video(url.strip())
-    transcript = load_transcript(
-        processing_result["transcript_path"]
+    processing_result = process_video(
+        url.strip(),
+        progress_callback=progress_callback,
     )
-    chunks = split_transcript(
-        transcript["segments"],
-        max_characters=max_characters,
-    )
-    chunk_summaries = summarize_chunks(
-        chunks,
-        max_workers=max_workers,
-    )
-    summary = merge_chunk_summaries(chunk_summaries)
-    summary_path = save_summary(
-        summary,
-        processing_result["video_id"],
-    )
+    try:
+        transcript = load_transcript(
+            processing_result["transcript_path"]
+        )
+        _report_stage(progress_callback, "SPLIT")
+        chunks = split_transcript(
+            transcript["segments"],
+            max_characters=max_characters,
+        )
+        _report_stage(progress_callback, "SUMMARIZE_CHUNKS")
+        chunk_summaries = summarize_chunks(
+            chunks,
+            max_workers=max_workers,
+        )
+        _report_stage(progress_callback, "MERGE")
+        summary = merge_chunk_summaries(chunk_summaries)
+        summary_path = save_summary(
+            summary,
+            processing_result["video_id"],
+        )
+    except (ModelUnavailableError, SummaryFailedError):
+        raise
+    except Exception as error:
+        raise _summary_error(error) from error
 
     elapsed_seconds = time.perf_counter() - start_time
 

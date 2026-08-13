@@ -1,0 +1,177 @@
+.task-animation {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 50%;
+  color: var(--color-text);
+  background: var(--color-panel-soft);
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 800;
+  isolation: isolate;
+}
+
+.task-animation::before,
+.task-animation::after {
+  position: absolute;
+  content: "";
+}
+
+.task-animation.is-pending {
+  border-style: dashed;
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+  background: var(--color-gold-soft);
+  animation: task-breathe var(--motion-breathe) var(--ease-standard) infinite;
+}
+
+.task-animation.is-pending::after {
+  position: static;
+  content: "…";
+  transform: translateY(-4px);
+}
+
+.task-animation.is-processing {
+  border-color: var(--color-border-strong);
+  border-top-color: var(--color-primary);
+  border-right-color: var(--color-gold);
+  background: var(--color-primary-soft);
+  animation: task-spin var(--motion-spin) linear infinite;
+}
+
+.task-animation.is-processing::before {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 5px var(--color-black-soft);
+}
+
+.task-animation.is-processing::after {
+  right: 7px;
+  bottom: 7px;
+  left: 7px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--color-gold) 0 38%,
+    var(--color-border-strong) 38% 100%
+  );
+}
+
+.task-animation.is-succeeded {
+  border-color: var(--color-success);
+  color: var(--color-navigation);
+  background: var(--color-success);
+  animation: task-reveal var(--motion-slow) var(--ease-emphasis) both;
+}
+
+.task-animation.is-succeeded::after {
+  position: static;
+  content: "✓";
+}
+
+.task-animation.is-failed {
+  border-color: var(--color-failure);
+  color: var(--color-failure);
+  background: var(--color-failure-soft);
+  animation: task-shake var(--motion-shake) var(--ease-standard) 1;
+}
+
+.task-animation.is-failed::after {
+  position: static;
+  content: "!";
+}
+
+.task-animation.is-unknown::after {
+  position: static;
+  color: var(--color-text-muted);
+  content: "?";
+}
+
+@keyframes task-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--color-gold-soft);
+    transform: scale(0.96);
+  }
+
+  50% {
+    box-shadow: 0 0 0 9px var(--color-gold-transparent);
+    transform: scale(1);
+  }
+}
+
+@keyframes task-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes task-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) rotate(-12deg);
+  }
+
+  70% {
+    transform: scale(1.08) rotate(2deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes task-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  22% {
+    transform: translateX(-5px);
+  }
+
+  45% {
+    transform: translateX(4px);
+  }
+
+  68% {
+    transform: translateX(-2px);
+  }
+
+  84% {
+    transform: translateX(1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .task-animation.is-pending,
+  .task-animation.is-processing,
+  .task-animation.is-succeeded,
+  .task-animation.is-failed {
+    animation: none;
+    transform: none;
+  }
+
+  .task-animation.is-processing {
+    border-color: var(--color-primary);
+  }
+}

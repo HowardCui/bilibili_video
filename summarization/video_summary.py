@@ -1,5 +1,4 @@
 #!/usr/bin/env python 3.12
-# -*- coding: utf-8 -*-
 # time: 2026/07/24
 # name: Haowen Cui
 
@@ -115,6 +114,7 @@ def summarize_bilibili_video(
         "summary_path": str(summary_path),
         "chunk_count": len(chunks),
         "summary": summary,
+        "danmaku_word_cloud": processing_result.get("danmaku_word_cloud"),
         "elapsed_seconds": round(elapsed_seconds, 2),
     }
 

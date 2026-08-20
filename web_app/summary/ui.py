@@ -1,5 +1,6 @@
 """Declarative UI and presentation mapping for video-summary tasks."""
 
+import math
 from datetime import UTC, datetime
 
 from htmltools import Tag
@@ -19,6 +20,12 @@ _TASK_STATE_CLASSES = {
     "PROCESSING": "is-processing",
     "SUCCEEDED": "is-succeeded",
     "FAILED": "is-failed",
+}
+
+_DANMAKU_REASONS = {
+    "NO_DANMAKU": "该视频当前没有可用的公开弹幕。",
+    "DOWNLOAD_FAILED": "弹幕词云暂不可用，视频总结不受影响。",
+    "PARSE_FAILED": "弹幕内容暂时无法解析，视频总结不受影响。",
 }
 
 
@@ -176,7 +183,180 @@ def summary_result_sections(result) -> list[dict]:
                 "content": content,
             }
         )
+    word_cloud = _public_word_cloud(result.get("danmaku_word_cloud"))
+    if word_cloud is not None:
+        sections.append(
+            {
+                "key": "danmaku_word_cloud",
+                "title": "弹幕词云",
+                "kind": "word_cloud",
+                "content": word_cloud,
+            }
+        )
     return sections
+
+
+def _public_word_cloud(value):
+    if not isinstance(value, dict):
+        return None
+    status = value.get("status")
+    if status not in {"AVAILABLE", "EMPTY", "UNAVAILABLE"}:
+        return None
+    words = []
+    if isinstance(value.get("words"), list):
+        for item in value["words"]:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            count = item.get("count")
+            if (
+                isinstance(text, str)
+                and text.strip()
+                and isinstance(count, int)
+                and not isinstance(count, bool)
+                and count > 0
+            ):
+                words.append({"text": text.strip(), "count": count})
+    return {
+        key: value[key]
+        for key in ("status", "reason", "total_comments", "used_comments")
+        if key in value
+    } | {"words": words}
+
+
+def _estimated_word_box(text, font_size, vertical):
+    units = sum(1 if ord(character) > 127 else 0.58 for character in text)
+    width = max(font_size, units * font_size)
+    height = font_size * 1.05
+    if vertical:
+        return height, width
+    return width, height
+
+
+def _boxes_overlap(candidate, occupied):
+    left, top, right, bottom = candidate
+    return any(
+        left < other_right
+        and right > other_left
+        and top < other_bottom
+        and bottom > other_top
+        for other_left, other_top, other_right, other_bottom in occupied
+    )
+
+
+def _word_cloud_layout(words, width=960, height=260):
+    maximum = max(item["count"] for item in words)
+    minimum = min(item["count"] for item in words)
+    spread = max(maximum - minimum, 1)
+    occupied = []
+    placed = []
+
+    for index, item in enumerate(words[:100]):
+        scale = (item["count"] - minimum) / spread
+        initial_size = 11 + 58 * (scale ** 0.55)
+        vertical = index >= 5 and index % 7 == 5
+        position = None
+        font_size = initial_size
+
+        for _shrink in range(4):
+            word_width, word_height = _estimated_word_box(
+                item["text"], font_size, vertical
+            )
+            for step in range(900):
+                angle = step * 0.34
+                radius = 0.72 * step
+                x = width / 2 + radius * math.cos(angle)
+                y = height / 2 + radius * math.sin(angle)
+                candidate = (
+                    x - word_width / 2 - 2,
+                    y - word_height / 2 - 2,
+                    x + word_width / 2 + 2,
+                    y + word_height / 2 + 2,
+                )
+                if (
+                    candidate[0] >= 4
+                    and candidate[1] >= 4
+                    and candidate[2] <= width - 4
+                    and candidate[3] <= height - 4
+                    and not _boxes_overlap(candidate, occupied)
+                ):
+                    position = (x, y, candidate)
+                    break
+            if position is not None:
+                break
+            font_size *= 0.82
+
+        if position is None or font_size < 9:
+            continue
+        x, y, box = position
+        occupied.append(box)
+        placed.append(
+            {
+                **item,
+                "x": round(x, 1),
+                "y": round(y, 1),
+                "font_size": round(font_size, 1),
+                "vertical": vertical,
+                "color": index % 4,
+            }
+        )
+    return placed
+
+
+def render_danmaku_word_cloud(word_cloud) -> Tag:
+    """Render one responsive, accessible word cloud from safe frequencies."""
+    public = _public_word_cloud(word_cloud)
+    if public is None:
+        return ui.p("弹幕词云数据不可用。", class_="danmaku-word-cloud-state")
+    status = public["status"]
+    words = public["words"]
+    if status == "UNAVAILABLE":
+        message = _DANMAKU_REASONS.get(
+            public.get("reason"),
+            "弹幕词云暂不可用，视频总结不受影响。",
+        )
+        return ui.p(message, class_="danmaku-word-cloud-state")
+    if status == "EMPTY" or not words:
+        return ui.p(
+            "弹幕清洗后没有可用于词云的关键词。",
+            class_="danmaku-word-cloud-state",
+        )
+
+    tags = []
+    for item in _word_cloud_layout(words):
+        transform = None
+        if item["vertical"]:
+            transform = f"rotate(90 {item['x']} {item['y']})"
+        tags.append(
+            Tag(
+                "text",
+                ui.tags.title(f"{item['text']}：{item['count']} 次"),
+                item["text"],
+                x=item["x"],
+                y=item["y"],
+                transform=transform,
+                style=f"font-size: {item['font_size']}px",
+                class_=f"danmaku-word danmaku-word-color-{item['color']}",
+            )
+        )
+    total = public.get("total_comments", 0)
+    used = public.get("used_comments", 0)
+    return ui.div(
+        ui.p(
+            f"原始弹幕 {total} 条 · 参与统计 {used} 条",
+            class_="danmaku-word-cloud-meta",
+        ),
+        ui.div(
+            ui.tags.svg(
+                *tags,
+                class_="danmaku-word-cloud-canvas",
+                viewBox="0 0 960 260",
+                role="img",
+                aria_label="弹幕高频词",
+            ),
+            class_="danmaku-word-cloud",
+        ),
+    )
 
 
 def _history_timestamp(value) -> str:
@@ -322,6 +502,7 @@ def summary_task_view_model(task) -> dict:
 __all__ = [
     "build_summary_ui",
     "render_summary_history",
+    "render_danmaku_word_cloud",
     "summary_history_choices",
     "summary_result_sections",
     "summary_task_state_class",

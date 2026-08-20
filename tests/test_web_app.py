@@ -95,13 +95,19 @@ def test_create_app_returns_shiny_application(tmp_path):
 def test_module_entrypoint_runs_on_fixed_local_address(tmp_path):
     """The documented module command must reach Shiny on localhost only."""
     project_root = Path(__file__).resolve().parents[1]
+    isolated_database = tmp_path / "entrypoint.db"
     (tmp_path / "sitecustomize.py").write_text(
-        """
+        f"""
+from pathlib import Path
+
+import ranking_collector.config
 from shiny import App
 
 
+ranking_collector.config.DATABASE_PATH = Path({str(isolated_database)!r})
+
 def controlled_run(self, *, host, port, **kwargs):
-    print(f"CONTROLLED_SHINY_RUN={host}:{port}")
+    print(f"CONTROLLED_SHINY_RUN={{host}}:{{port}}")
 
 
 App.run = controlled_run

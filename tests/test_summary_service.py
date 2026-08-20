@@ -1299,6 +1299,14 @@ def test_summary_service_uses_real_artifacts_and_reports_stage_boundaries(
             "keywords": ["keyword"],
             "video_id": "BV1TEST",
         },
+        "danmaku_word_cloud": {
+            "video_id": "BV1TEST",
+            "status": "UNAVAILABLE",
+            "reason": "NO_DANMAKU",
+            "total_comments": 0,
+            "used_comments": 0,
+            "words": [],
+        },
         "elapsed_seconds": result["elapsed_seconds"],
     }
 

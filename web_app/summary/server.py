@@ -2,7 +2,11 @@
 
 from shiny import reactive, render, ui
 
-from .ui import render_summary_history, summary_task_view_model
+from .ui import (
+    render_danmaku_word_cloud,
+    render_summary_history,
+    summary_task_view_model,
+)
 
 _CURRENT_TASK_REFRESH_SECONDS = 1.5
 _HISTORY_REFRESH_SECONDS = 10.0
@@ -118,6 +122,8 @@ def _render_section(section):
         body = ui.tags.dl(*entries)
     elif section["kind"] == "items":
         body = ui.tags.ul(*(_render_item(item) for item in content))
+    elif section["kind"] == "word_cloud":
+        body = render_danmaku_word_cloud(content)
     else:
         body = ui.p(str(content))
     return ui.tags.section(ui.h4(section["title"]), body)

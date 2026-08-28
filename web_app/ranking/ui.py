@@ -4,6 +4,7 @@ from htmltools import Tag
 from shiny import ui
 
 from ranking_collector.config import PARTITIONS
+from web_app.trends.ui import build_trends_ui
 
 STATUS_LABELS = {
     "CURRENT": "当前数据",
@@ -114,6 +115,7 @@ def build_ranking_ui() -> Tag:
             ),
             class_="ranking-table dashboard-panel",
         ),
+        build_trends_ui(),
         class_="ranking-dashboard",
     )
 

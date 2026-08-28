@@ -5,6 +5,7 @@ import sqlite3
 from shiny import reactive, render, ui
 
 from ranking_collector.repository import RepositoryError
+from web_app.trends.server import register_trends_server
 
 from .queries import build_ranking_page_data
 from .ui import (
@@ -31,7 +32,7 @@ def load_ranking_page_data(partition, database_path) -> dict:
 
 def register_ranking_server(input, output, session, database_path) -> None:
     """Register ranking outputs without starting any collection work."""
-    _ = session
+    register_trends_server(input, output, session, database_path)
 
     @reactive.calc
     def page_data():

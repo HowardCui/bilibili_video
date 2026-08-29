@@ -2,6 +2,8 @@ import sqlite3
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+from curl_cffi.requests.exceptions import HTTPError
+
 from ranking_collector.models import ranking_item_from_bilibili
 from ranking_collector.repository import (
     connect_database,
@@ -215,3 +217,52 @@ def test_collection_retries_transient_errors_and_resumes_pages(tmp_path):
     assert result["status"] == "SUCCEEDED"
     assert attempts == [1, 1, 1, 2]
     assert waits[:2] == [1, 2]
+
+
+def test_http_412_is_reported_as_risk_control():
+    response = SimpleNamespace(status_code=412)
+
+    def get(_url, **_kwargs):
+        return SimpleNamespace(
+            raise_for_status=lambda: (_ for _ in ()).throw(
+                HTTPError("HTTP Error 412", response=response)
+            )
+        )
+
+    try:
+        fetch_uploader_page(
+            123,
+            session=SimpleNamespace(get=get),
+            wbi_keys=("a" * 32, "b" * 32),
+        )
+    except UploaderClientError as error:
+        assert error.error_code == "RISK_CONTROL"
+        assert error.http_status == 412
+    else:
+        raise AssertionError("HTTP 412 should raise UploaderClientError")
+
+
+def test_cookie_risk_control_uses_long_backoff(tmp_path, monkeypatch):
+    database_path = tmp_path / "ranking.db"
+    now = datetime(2026, 8, 28, tzinfo=UTC)
+    _seed_profile(database_path, now)
+    attempts = []
+    waits = []
+
+    def fetch_page(_uploader_id, _page):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise UploaderClientError("blocked", "COOKIE_RISK_CONTROL")
+        return {"videos": [], "next_cursor": 2, "has_more": False}
+
+    monkeypatch.setattr("uploader_analysis.service.random.uniform", lambda _a, _b: 30)
+    result = collect_uploader_history(
+        123,
+        database_path,
+        fetch_page=fetch_page,
+        sleep=waits.append,
+        now=lambda: now,
+    )
+    assert result["status"] == "SUCCEEDED"
+    assert attempts == [1, 1, 1]
+    assert waits == [30, 30]

@@ -80,9 +80,28 @@ MIXIN_KEY_ORDER = (
 
 
 class UploaderClientError(RuntimeError):
-    def __init__(self, message, error_code="REQUEST_FAILED"):
+    def __init__(
+        self,
+        message,
+        error_code="REQUEST_FAILED",
+        http_status=None,
+    ):
         super().__init__(message)
         self.error_code = error_code
+        self.http_status = http_status
+
+
+def _request_error(error, request_stage=None):
+    response = getattr(error, "response", None)
+    status = getattr(response, "status_code", None)
+    if status == 412:
+        code = (
+            f"{request_stage}_RISK_CONTROL"
+            if request_stage is not None
+            else "RISK_CONTROL"
+        )
+        return UploaderClientError("Bilibili 请求触发风控", code, status)
+    return UploaderClientError("UP 历史投稿请求失败", http_status=status)
 
 
 def _mixin_key(image_key, sub_key):
@@ -107,20 +126,31 @@ def _key_from_url(value):
     return PurePosixPath(urlparse(value).path).stem
 
 
-def get_wbi_keys(session, timeout=15):
+def get_wbi_keys(session, timeout=15, request_stage=None):
     try:
         response = session.get(NAV_URL, impersonate="firefox", timeout=timeout)
         response.raise_for_status()
         images = (response.json().get("data") or {}).get("wbi_img") or {}
         return _key_from_url(images["img_url"]), _key_from_url(images["sub_url"])
-    except (RequestException, ValueError, KeyError, TypeError) as error:
+    except RequestException as error:
+        raise _request_error(error, request_stage) from error
+    except (ValueError, KeyError, TypeError) as error:
         raise UploaderClientError("无法获取 UP 投稿请求签名") from error
 
 
 def _fetch_with_session(
-    session, uploader_id, page, page_size, timeout, wbi_keys, timestamp
+    session,
+    uploader_id,
+    page,
+    page_size,
+    timeout,
+    wbi_keys,
+    timestamp,
+    request_stage=None,
 ):
-    image_key, sub_key = wbi_keys or get_wbi_keys(session, timeout)
+    image_key, sub_key = wbi_keys or get_wbi_keys(
+        session, timeout, request_stage
+    )
     params = build_wbi_params(
         {
             "mid": uploader_id,
@@ -142,14 +172,19 @@ def _fetch_with_session(
         )
         response.raise_for_status()
         payload = response.json()
-    except (RequestException, ValueError) as error:
-        raise UploaderClientError("UP 历史投稿请求失败") from error
+    except RequestException as error:
+        raise _request_error(error, request_stage) from error
+    except ValueError as error:
+        raise UploaderClientError("UP 历史投稿响应无效") from error
     if not isinstance(payload, dict):
         raise UploaderClientError("UP 历史投稿响应无效")
     code = payload.get("code")
     if code != 0:
         codes = {-352: "RISK_CONTROL", -404: "NOT_FOUND", -403: "RESTRICTED"}
-        raise UploaderClientError("UP 历史投稿暂时不可用", codes.get(code, "API_ERROR"))
+        error_code = codes.get(code, "API_ERROR")
+        if error_code == "RISK_CONTROL" and request_stage is not None:
+            error_code = f"{request_stage}_RISK_CONTROL"
+        raise UploaderClientError("UP 历史投稿暂时不可用", error_code)
     data = payload.get("data") or {}
     videos = (data.get("list") or {}).get("vlist") or []
     page_data = data.get("page") or {}
@@ -190,6 +225,7 @@ def fetch_uploader_page(
             timeout,
             wbi_keys,
             timestamp,
+            "ANONYMOUS",
         )
     except UploaderClientError:
         cookie_session = get_cookie_session()
@@ -203,6 +239,7 @@ def fetch_uploader_page(
             timeout,
             wbi_keys,
             timestamp,
+            "COOKIE",
         )
 
 

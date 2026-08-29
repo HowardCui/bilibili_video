@@ -127,11 +127,19 @@ def collect_uploader_history(
                     page = fetch_page(uploader_id, cursor)
                     break
                 except UploaderClientError as error:
-                    if error.error_code not in {"REQUEST_FAILED", "API_ERROR"}:
+                    risk_control = error.error_code.endswith("RISK_CONTROL")
+                    transient = error.error_code in {
+                        "REQUEST_FAILED",
+                        "API_ERROR",
+                    }
+                    if not transient and not risk_control:
                         raise
                     if attempt == 2:
                         raise
-                    sleep(2**attempt)
+                    if risk_control:
+                        sleep(random.uniform(30, 60))
+                    else:
+                        sleep(2**attempt)
             collected_at = current_time()
             save_uploader_page(
                 task_id,

@@ -5,6 +5,7 @@ from shiny import ui
 
 from .ranking.ui import build_ranking_ui
 from .summary.ui import build_summary_ui
+from .uploader.ui import build_uploader_ui
 
 
 def build_app_ui() -> Tag:
@@ -34,6 +35,10 @@ def build_app_ui() -> Tag:
                     ui.nav_panel(
                         "视频总结",
                         build_summary_ui(),
+                    ),
+                    ui.nav_panel(
+                        "UP 分析",
+                        build_uploader_ui(),
                     ),
                     id="primary_navigation",
                     selected="排行榜",

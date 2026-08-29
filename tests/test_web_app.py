@@ -11,10 +11,11 @@ from web_app.layout import build_app_ui
 _WWW = Path(__file__).parents[1] / "web_app" / "www"
 
 
-def test_build_app_ui_contains_two_main_entries():
+def test_build_app_ui_contains_main_entries():
     markup = str(build_app_ui())
     assert "排行榜" in markup
     assert "视频总结" in markup
+    assert "UP 分析" in markup
 
 
 def test_build_app_ui_exposes_the_responsive_dashboard_shell_and_stylesheets():

@@ -1,5 +1,4 @@
 #!/usr/bin/env python 3.12
-# -*- coding: utf-8 -*-
 
 """Ranking Collector 的 SQLite 数据持久化函数。"""
 
@@ -17,7 +16,6 @@ from ranking_collector.models import (
     validate_datetime,
     validate_text,
 )
-
 
 CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS collection_runs (
@@ -58,6 +56,7 @@ CREATE TABLE IF NOT EXISTS ranking_items (
     bvid TEXT NOT NULL,
     title TEXT NOT NULL,
     uploader TEXT NOT NULL,
+    uploader_id INTEGER,
     partition TEXT NOT NULL,
     published_at TEXT NOT NULL,
     rank INTEGER NOT NULL CHECK (rank > 0),
@@ -120,6 +119,19 @@ def connect_database(database_path=DATABASE_PATH):
 def initialize_database(database_path=DATABASE_PATH):
     """创建数据库、数据表和索引。"""
     with connect_database(database_path) as connection:
+        existing = connection.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type='table' AND name='ranking_items'"
+        ).fetchone()
+        if existing is not None:
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(ranking_items)")
+            }
+            if "uploader_id" not in columns:
+                connection.execute(
+                    "ALTER TABLE ranking_items ADD COLUMN uploader_id INTEGER"
+                )
         connection.executescript(CREATE_TABLES_SQL)
 
 
@@ -274,6 +286,7 @@ def save_snapshot(run_id, snapshot, database_path=DATABASE_PATH):
                         bvid,
                         title,
                         uploader,
+                        uploader_id,
                         partition,
                         published_at,
                         rank,
@@ -285,13 +298,14 @@ def save_snapshot(run_id, snapshot, database_path=DATABASE_PATH):
                         danmaku,
                         shares,
                         collected_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         snapshot_id,
                         item.video.bvid,
                         item.video.title,
                         item.video.uploader,
+                        item.video.uploader_id,
                         item.video.partition,
                         datetime_to_text(item.video.published_at),
                         item.rank,
@@ -348,16 +362,17 @@ def save_successful_partition_snapshot(
                 connection.execute(
                     """
                     INSERT INTO ranking_items (
-                        snapshot_id, bvid, title, uploader, partition,
+                        snapshot_id, bvid, title, uploader, uploader_id, partition,
                         published_at, rank, views, likes, coins, favorites,
                         comments, danmaku, shares, collected_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         snapshot_id,
                         item.video.bvid,
                         item.video.title,
                         item.video.uploader,
+                        item.video.uploader_id,
                         item.video.partition,
                         datetime_to_text(item.video.published_at),
                         item.rank,
@@ -392,6 +407,7 @@ def row_to_ranking_item(row):
         bvid=row["bvid"],
         title=row["title"],
         uploader=row["uploader"],
+        uploader_id=row["uploader_id"],
         partition=row["partition"],
         published_at=text_to_datetime(row["published_at"]),
     )

@@ -161,6 +161,10 @@ body {
   content: "结";
 }
 
+.dashboard-navigation > .nav .nav-item:nth-child(3) .nav-link::before {
+  content: "UP";
+}
+
 .dashboard-navigation > .nav .nav-link:hover {
   color: var(--color-text);
   background: var(--color-white-soft);
@@ -187,7 +191,8 @@ body {
 }
 
 .ranking-dashboard,
-.summary-dashboard {
+.summary-dashboard,
+.uploader-dashboard {
   display: grid;
   min-width: 0;
   gap: var(--space-4);
@@ -195,6 +200,65 @@ body {
 
 .ranking-dashboard {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.uploader-header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 360px);
+  gap: var(--space-5) var(--space-8);
+  padding: var(--space-6);
+}
+
+.uploader-controls {
+  display: grid;
+  gap: var(--space-2);
+  align-content: end;
+}
+
+.uploader-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.75fr) minmax(0, 1.6fr);
+  gap: var(--space-4);
+}
+
+.uploader-profile,
+.uploader-metric-grid,
+.uploader-videos {
+  padding: var(--space-5);
+}
+
+.uploader-profile h3 {
+  margin: var(--space-2) 0;
+}
+
+.uploader-identity,
+.uploader-status {
+  color: var(--color-text-secondary);
+}
+
+.uploader-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.uploader-metric {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-panel-soft);
+}
+
+.uploader-metric dt {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.uploader-metric dd {
+  margin: var(--space-1) 0 0;
+  color: var(--color-gold);
+  font-size: 1.15rem;
+  font-weight: 800;
 }
 
 .ranking-empty-slot {
@@ -1020,7 +1084,7 @@ select:focus-visible {
     display: grid;
     width: auto;
     padding: var(--space-2);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-2);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-lg);
@@ -1041,7 +1105,9 @@ select:focus-visible {
 
   .ranking-dashboard,
   .ranking-main-grid,
-  .summary-workspace {
+  .summary-workspace,
+  .uploader-header,
+  .uploader-overview-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1067,8 +1133,15 @@ select:focus-visible {
   .summary-current,
   .summary-results,
   .summary-history,
-  .summary-form {
+  .summary-form,
+  .uploader-profile,
+  .uploader-metric-grid,
+  .uploader-videos {
     padding: var(--space-4);
+  }
+
+  .uploader-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ranking-metric-grid {
@@ -1127,5 +1200,9 @@ select:focus-visible {
 
   .dashboard-navigation > .nav .nav-link {
     gap: var(--space-1);
+  }
+
+  .uploader-metric-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

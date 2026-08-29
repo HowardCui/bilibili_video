@@ -1,5 +1,4 @@
 #!/usr/bin/env python 3.12
-# -*- coding: utf-8 -*-
 
 """Ranking Collector 内部使用的统一数据模型。"""
 
@@ -53,10 +52,17 @@ def get_metric_value(stat, key):
 class VideoInfo:
     """视频基础信息。"""
 
-    def __init__(self, bvid, title, uploader, partition, published_at):
+    def __init__(
+        self, bvid, title, uploader, partition, published_at, uploader_id=None
+    ):
         self.bvid = validate_text(bvid, "bvid")
         self.title = validate_text(title, "title")
         self.uploader = validate_text(uploader, "uploader")
+        if uploader_id is not None:
+            uploader_id = validate_non_negative_integer(uploader_id, "uploader_id")
+            if uploader_id == 0:
+                raise ValueError("uploader_id 必须大于 0")
+        self.uploader_id = uploader_id
         self.partition = validate_text(partition, "partition")
         self.published_at = validate_datetime(
             published_at,
@@ -405,6 +411,11 @@ def ranking_item_from_bilibili(
         get_required_value(owner, "name"),
         "owner.name",
     )
+    uploader_id = owner.get("mid")
+    if uploader_id is not None:
+        uploader_id = validate_non_negative_integer(uploader_id, "owner.mid")
+        if uploader_id == 0:
+            raise ValueError("owner.mid 必须大于 0")
 
     pubdate = get_required_value(raw, "pubdate")
     if not isinstance(pubdate, (int, float)) or isinstance(pubdate, bool):
@@ -428,6 +439,7 @@ def ranking_item_from_bilibili(
         uploader=uploader,
         partition=partition,
         published_at=published_at,
+        uploader_id=uploader_id,
     )
     metrics = VideoMetrics(
         views=get_metric_value(stat, "view"),

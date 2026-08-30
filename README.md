@@ -98,6 +98,21 @@ python -m ranking_collector.ranking_collector_pipeline --schedule
 python -m ranking_collector.ranking_collector_pipeline --help
 ```
 
+### Agent 按需执行一次采集
+
+Codex 或本机计划任务需要执行一次采集时，优先使用带并发、超时和数据库验证的包装入口：
+
+```powershell
+python -m automation.ranking_once
+python -m automation.ranking_once --json
+```
+
+包装入口会在可终止的子进程中调用现有排行榜 Service，并在进程结束后读取 SQLite，确认任务、分区结果、快照和条目确实写入。默认超时为 300 秒；可通过 `--timeout` 调整。它不会启动长期调度器，也不会控制 Web 服务。
+
+结构化状态包括 `SUCCEEDED`、`PARTIAL_FAILED`、`FAILED`、`SKIPPED_ALREADY_RUNNING` 和 `TIMED_OUT`。退出码依次为 `0`、`2`、`1`、`3` 和 `4`。JSON 和文本报告不会输出 Cookie、API Key、堆栈或敏感本地路径。
+
+不要同时运行该包装入口、原有 `--once` 和 `--schedule`。周期执行应只选择 Codex 自动化或 Windows 任务计划程序中的一种。
+
 ## 验证
 
 ```powershell

@@ -24,6 +24,7 @@ logs/
 .agents/
 .superpowers/
 .codex/
+docs/superpowers/
 
 # 其他构建和测试产物
 dist/

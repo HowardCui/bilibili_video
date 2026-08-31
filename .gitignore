@@ -15,3 +15,22 @@ build/
 
 .secrets/
 .worktrees/
+
+# 运行日志
+logs/
+*.log
+
+# 本地 Agent 工作文件
+.agents/
+.superpowers/
+.codex/
+
+# 其他构建和测试产物
+dist/
+coverage.xml
+.mypy_cache/
+.tox/
+
+# 系统文件
+.DS_Store
+Thumbs.db

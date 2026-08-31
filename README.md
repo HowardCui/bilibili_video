@@ -2,7 +2,7 @@
 
 这是一个本地运行的 Python 应用，提供三个互相独立的工作入口：
 
-- **排行榜**：读取已经采集到 SQLite 的五个分区快照，展示 Top 100、榜单变化和数据新鲜度。
+- **排行榜**：读取已经采集到 SQLite 的五个分区快照，展示 Top 100、榜单变化、数据新鲜度和长期趋势。
 - **视频总结**：接收 Bilibili 视频链接，在后台获取元数据、字幕和公开弹幕，保存结构化总结并展示弹幕词云。
 - **UP 分析**：选择曾进入项目排行榜且已确认数字 UID 的 UP，采集历史投稿并分析投稿节奏、视频表现、爆款和上榜情况。
 
@@ -12,11 +12,13 @@ Web 页面负责读取排行榜数据、管理总结任务和按用户操作采�
 
 ```text
 浏览器（仅本机）
-  └─ web_app：Shiny 导航、排行榜查询、总结任务与静态样式
+  └─ web_app：Shiny 导航、排行榜与趋势查询、总结任务、UP 分析
        ├─ ranking_collector：采集客户端、调度器、比较逻辑、SQLite 仓储
        ├─ uploader_analysis：上榜 UP 档案、历史投稿采集、快照和分析
        ├─ video_processing：元数据、字幕、文字稿处理
        └─ summarization：文本切分、模型调用、结构化结果
+
+automation：排行榜单次采集、并发锁、超时控制和数据库结果验证
 
 data/ranking.db：排行榜快照、总结任务、UP 档案、历史投稿和指标快照
 data/：元数据、字幕、弹幕 XML、词云缓存、文字稿和总结等运行时产物
@@ -52,8 +54,14 @@ SUMMARY_VIDEO_API_KEY=your-model-api-key
 BILIBILI_COOKIE_FILE=C:\path\to\bilibili-cookies.txt
 ```
 
-- `SUMMARY_VIDEO_API_KEY` 供视频总结模型使用；模型名和服务地址保存在 `config.json` 的 `model` 与 `base_url` 字段。
-- `BILIBILI_COOKIE_FILE` 可指向 Netscape 格式的 Cookie 文件。排行榜和 UP 历史投稿客户端始终先发起匿名请求，只有匿名请求失败时才尝试读取 Cookie 并重试。
+| 参数 | 是否必需 | 用途 |
+|---|---|---|
+| `SUMMARY_VIDEO_API_KEY` | 视频总结必需 | 视频总结模型凭据 |
+| `BILIBILI_COOKIE_FILE` | 可选 | Netscape 格式的 Bilibili Cookie 文件路径 |
+| `config.json` 中的 `model` | 视频总结必需 | 模型名称 |
+| `config.json` 中的 `base_url` | 视频总结必需 | 模型服务地址 |
+
+排行榜和 UP 历史投稿客户端始终先发起匿名请求，只有匿名请求失败时才尝试读取 Cookie 并重试。
 - `.env`、`.secrets/` 和 `config.json` 按当前仓库约定不提交。Web 页面不会显示、读取回显或允许编辑 API Key、Cookie 或其他秘密。
 
 不要把真实凭据写入 README、测试、日志或浏览器表单。
@@ -70,11 +78,33 @@ python -m web_app.app
 
 弹幕通过 yt-dlp 的 `danmaku` 字幕轨道下载。原始 XML 和不含用户身份的词频结果最多缓存 7 天；弹幕不可用或处理失败不会影响字幕总结任务完成。
 
+### 查看排行榜
+
+1. 先执行一次排行榜采集，或确认 `data/ranking.db` 中已有快照。
+2. 打开左侧“排行榜”。
+3. 选择全站、知识、科技、游戏或生活分区。
+4. 查看当前快照、榜单变化、播放增长和 Top 100。
+5. 在长期趋势区域选择 `24 小时`、`7 天`、`30 天` 或 `全部`，查看排名和指标轨迹。
+
+`Top 100` 表示最多保存和显示 100 条。Bilibili 分区接口返回不足 100 条时，项目按实际返回数量保存，不使用其他数据补位。
+
+### 提交视频总结
+
+1. 打开左侧“视频总结”。
+2. 输入包含 BV 号的 Bilibili 视频链接并提交。
+3. 页面会显示排队、处理、完成或失败状态。
+4. 完成后查看结构化总结和弹幕词云。重复提交已有成功结果的视频时会优先复用历史结果。
+
 ### 使用 UP 分析
 
 UP 分析只列出排行榜数据中已经保存数字 UID 的 UP。旧榜单记录如果没有 UID，不会按名称推测或错误合并；执行一次新的排行榜采集后，新快照会保存平台返回的 UP UID。
 
-进入左侧“UP 分析”后选择 UP，点击“采集或更新历史投稿”。采集任务在后台分页执行，结果保存到 `data/ranking.db`：
+1. 先执行一次新的排行榜采集，使快照保存 UP 数字 UID。
+2. 进入左侧“UP 分析”并选择 UP。
+3. 点击“采集或更新历史投稿”。
+4. 等待采集状态完成，再查看投稿节奏、视频表现、爆款和上榜情况。
+
+采集任务在后台分页执行，结果保存到 `data/ranking.db`：
 
 - `uploader_profiles`：UP 数字 UID、当前名称及上榜时间范围。
 - `uploader_collection_tasks`：采集状态、分页游标和安全错误码。
@@ -98,6 +128,16 @@ python -m ranking_collector.ranking_collector_pipeline --schedule
 python -m ranking_collector.ranking_collector_pipeline --help
 ```
 
+参数：
+
+| 参数 | 作用 |
+|---|---|
+| `--once` | 立即采集一轮，保存结果后退出 |
+| `--schedule` | 启动长期调度器，在北京时间每天 00、06、12、18 点采集 |
+| `--help` | 显示帮助，不执行采集 |
+
+`--once` 和 `--schedule` 必须选择一个，不能同时使用。分区采集结果以接口实际返回数量为准，单个分区最多保存 100 条。
+
 ### Agent 按需执行一次采集
 
 Codex 或本机计划任务需要执行一次采集时，优先使用带并发、超时和数据库验证的包装入口：
@@ -108,6 +148,16 @@ python -m automation.ranking_once --json
 ```
 
 包装入口会在可终止的子进程中调用现有排行榜 Service，并在进程结束后读取 SQLite，确认任务、分区结果、快照和条目确实写入。默认超时为 300 秒；可通过 `--timeout` 调整。它不会启动长期调度器，也不会控制 Web 服务。
+
+参数：
+
+| 参数 | 默认值 | 作用 |
+|---|---:|---|
+| `--database PATH` | `data/ranking.db` | 指定 SQLite 数据库 |
+| `--timeout SECONDS` | `300` | 子进程最长运行秒数 |
+| `--stale-after-minutes MINUTES` | `30` | 未结束任务超过该时长后按遗留任务处理 |
+| `--json` | 关闭 | 输出 JSON；不设置时输出文本报告 |
+| `--help` | - | 显示帮助，不执行采集 |
 
 结构化状态包括 `SUCCEEDED`、`PARTIAL_FAILED`、`FAILED`、`SKIPPED_ALREADY_RUNNING` 和 `TIMED_OUT`。退出码依次为 `0`、`2`、`1`、`3` 和 `4`。JSON 和文本报告不会输出 Cookie、API Key、堆栈或敏感本地路径。
 
@@ -127,7 +177,6 @@ python -m ruff check .
 - [x] 第一批：视频总结弹幕词云。
 - [x] 第二批：排行榜长期趋势。
 - [x] 第三批：上榜 UP 历史视频分析。
-- [ ] 第四批：Codex 按需触发排行榜单次采集。
-- [ ] 第五批：UP 分析数据可视化，图表计划放在历史投稿板块上方。
+- [x] 第四批：排行榜单次采集包装、并发保护、超时和数据库结果验证。
 
-更详细的目标、边界和验收条件见[下阶段计划](docs/下阶段计划.md)。
+后续目标和验收条件见[下阶段计划](docs/下阶段计划.md)。

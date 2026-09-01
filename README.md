@@ -142,6 +142,8 @@ python -m ranking_collector.ranking_collector_pipeline --help
 
 Codex 或本机计划任务需要执行一次采集时，优先使用带并发、超时和数据库验证的包装入口：
 
+需要让 Codex 按北京时间周期执行时，参见 [Codex 定时采集教程](docs/Codex定时采集教程.md)。
+
 ```powershell
 python -m automation.ranking_once
 python -m automation.ranking_once --json

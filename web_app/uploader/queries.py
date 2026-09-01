@@ -10,6 +10,8 @@ from uploader_analysis.service import (
     calculate_uploader_ranking_analysis,
 )
 
+from .visualization import build_uploader_visualization
+
 
 def list_uploader_choices(database_path):
     sync_ranked_uploaders(database_path)
@@ -21,23 +23,40 @@ def list_uploader_choices(database_path):
     }
 
 
-def build_uploader_page_data(uploader_id, database_path):
+def _visualization(videos, ranked_bvids, analysis, metric):
+    try:
+        return build_uploader_visualization(
+            videos, ranked_bvids, analysis, metric=metric
+        )
+    except (KeyError, TypeError, ValueError):
+        return {
+            "status": "QUERY_FAILED",
+            "metric": metric,
+            "sample_count": len(videos),
+        }
+
+
+def build_uploader_page_data(uploader_id, database_path, metric="views"):
     if uploader_id in (None, ""):
+        analysis = calculate_uploader_analysis([], set())
         return {
             "status": "NO_SELECTION",
             "profile": None,
             "task": None,
             "videos": [],
-            "analysis": calculate_uploader_analysis([], set()),
+            "analysis": analysis,
+            "visualization": _visualization([], set(), analysis, metric),
         }
     detail = get_uploader_detail(int(uploader_id), database_path)
     if detail is None:
+        analysis = calculate_uploader_analysis([], set())
         return {
             "status": "UNCONFIRMED",
             "profile": None,
             "task": None,
             "videos": [],
-            "analysis": calculate_uploader_analysis([], set()),
+            "analysis": analysis,
+            "visualization": _visualization([], set(), analysis, metric),
         }
     analysis = calculate_uploader_analysis(detail["videos"], detail["ranked_bvids"])
     analysis.update(
@@ -49,6 +68,9 @@ def build_uploader_page_data(uploader_id, database_path):
         "task": detail["task"],
         "videos": detail["videos"],
         "analysis": analysis,
+        "visualization": _visualization(
+            detail["videos"], detail["ranked_bvids"], analysis, metric
+        ),
     }
 
 

@@ -223,8 +223,101 @@ body {
 
 .uploader-profile,
 .uploader-metric-grid,
+.uploader-visualization,
 .uploader-videos {
   padding: var(--space-5);
+}
+
+.uploader-visualization-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  align-items: end;
+  margin-bottom: var(--space-4);
+}
+
+.uploader-visualization-heading .form-group {
+  width: min(240px, 100%);
+  margin: 0;
+}
+
+.uploader-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.uploader-chart-card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-panel-soft);
+}
+
+.uploader-chart-card h4 {
+  margin: 0 0 var(--space-3);
+}
+
+.uploader-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 180px;
+}
+
+.uploader-chart-axis {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+
+.uploader-chart-line {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.uploader-chart-point {
+  fill: var(--color-gold);
+  stroke: var(--color-panel);
+  stroke-width: 2;
+}
+
+.uploader-chart-point-ranked {
+  fill: var(--color-success);
+}
+
+.uploader-chart-legend,
+.uploader-chart-caption,
+.uploader-chart-empty,
+.uploader-visualization-meta {
+  color: var(--color-text-muted);
+}
+
+.uploader-chart-caption {
+  margin: 0 0 var(--space-2);
+  font-size: 0.82rem;
+}
+
+.uploader-visualization-notice {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-failure-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-failure-soft);
+}
+
+.uploader-stat-card p {
+  margin: var(--space-2) 0 0;
+}
+
+.uploader-visualization-meta {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .uploader-profile h3 {
@@ -1107,7 +1200,8 @@ select:focus-visible {
   .ranking-main-grid,
   .summary-workspace,
   .uploader-header,
-  .uploader-overview-grid {
+  .uploader-overview-grid,
+  .uploader-chart-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1136,12 +1230,22 @@ select:focus-visible {
   .summary-form,
   .uploader-profile,
   .uploader-metric-grid,
+  .uploader-visualization,
   .uploader-videos {
     padding: var(--space-4);
   }
 
   .uploader-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .uploader-visualization-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .uploader-visualization-heading .form-group {
+    width: 100%;
   }
 
   .ranking-metric-grid {

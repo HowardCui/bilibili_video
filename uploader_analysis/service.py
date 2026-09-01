@@ -11,6 +11,7 @@ from uploader_analysis.repository import (
     create_collection_task,
     fail_collection_task,
     get_uploader_detail,
+    pause_collection_task,
     save_uploader_page,
 )
 
@@ -159,7 +160,8 @@ def collect_uploader_history(
                 }
             cursor = page["next_cursor"]
             sleep(random.uniform(1.0, 2.0))
-        return {"task_id": task_id, "status": "RUNNING", "pages_saved": pages_saved}
+        pause_collection_task(task_id, current_time(), database_path)
+        return {"task_id": task_id, "status": "PAUSED", "pages_saved": pages_saved}
     except UploaderClientError as error:
         fail_collection_task(task_id, error.error_code, database_path)
         return {"task_id": task_id, "status": "FAILED", "error_code": error.error_code}

@@ -122,13 +122,21 @@ def create_collection_task(uploader_id, database_path=DATABASE_PATH, now=None):
     initialize_uploader_database(database_path)
     now_text = datetime_to_text(now or datetime.now(UTC))
     with connect_database(database_path) as connection:
-        active = connection.execute(
-            """SELECT id FROM uploader_collection_tasks
-            WHERE uploader_id=? AND status='RUNNING'""",
+        latest = connection.execute(
+            """SELECT id,status FROM uploader_collection_tasks
+            WHERE uploader_id=? ORDER BY id DESC LIMIT 1""",
             (uploader_id,),
         ).fetchone()
-        if active is not None:
-            return active["id"]
+        if latest is not None and latest["status"] == "RUNNING":
+            return latest["id"]
+        if latest is not None and latest["status"] == "PAUSED":
+            connection.execute(
+                """UPDATE uploader_collection_tasks
+                SET status='RUNNING',updated_at=?,finished_at=NULL,error_code=NULL
+                WHERE id=?""",
+                (now_text, latest["id"]),
+            )
+            return latest["id"]
         try:
             cursor = connection.execute(
                 """INSERT INTO uploader_collection_tasks (
@@ -139,6 +147,16 @@ def create_collection_task(uploader_id, database_path=DATABASE_PATH, now=None):
         except sqlite3.IntegrityError as error:
             raise ValueError("UP 身份未确认，不能创建采集任务") from error
         return cursor.lastrowid
+
+
+def pause_collection_task(task_id, paused_at, database_path=DATABASE_PATH):
+    paused_text = datetime_to_text(paused_at)
+    with connect_database(database_path) as connection:
+        connection.execute(
+            """UPDATE uploader_collection_tasks SET status='PAUSED',updated_at=?
+            WHERE id=? AND status='RUNNING'""",
+            (paused_text, task_id),
+        )
 
 
 def _video_values(raw):
@@ -155,8 +173,13 @@ def _video_values(raw):
         "likes": int(stat.get("like", raw.get("likes", 0)) or 0),
         "coins": int(stat.get("coin", raw.get("coins", 0)) or 0),
         "favorites": int(stat.get("favorite", raw.get("favorites", 0)) or 0),
-        "comments": int(stat.get("reply", raw.get("comments", 0)) or 0),
-        "danmaku": int(stat.get("danmaku", raw.get("danmaku", 0)) or 0),
+        "comments": int(
+            stat.get("reply", raw.get("comments", raw.get("comment", 0))) or 0
+        ),
+        "danmaku": int(
+            stat.get("danmaku", raw.get("danmaku", raw.get("video_review", 0)))
+            or 0
+        ),
         "shares": int(stat.get("share", raw.get("shares", 0)) or 0),
     }
 
@@ -283,6 +306,7 @@ __all__ = [
     "get_uploader_detail",
     "initialize_uploader_database",
     "list_ranked_uploaders",
+    "pause_collection_task",
     "save_uploader_page",
     "sync_ranked_uploaders",
 ]

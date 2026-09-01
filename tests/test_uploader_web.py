@@ -66,3 +66,17 @@ def test_uploader_view_maps_safe_status_and_sample_copy():
     assert view["title"] == "示例 UP"
     assert "风控" in view["collection_message"]
     assert "1 个历史投稿样本" in view["sample_message"]
+
+
+def test_uploader_view_marks_paused_batch_as_continuable():
+    view = uploader_view_model(
+        {
+            "status": "READY",
+            "profile": {"current_name": "示例 UP", "uploader_id": 123},
+            "task": {"status": "PAUSED"},
+            "videos": [],
+            "analysis": {"video_count": 600},
+        }
+    )
+
+    assert "可继续采集" in view["collection_message"]

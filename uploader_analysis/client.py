@@ -11,6 +11,7 @@ from ranking_collector.client import get_cookie_session, get_shared_session
 
 NAV_URL = "https://api.bilibili.com/x/web-interface/nav"
 UPLOADER_VIDEO_URL = "https://api.bilibili.com/x/space/wbi/arc/search"
+VIDEO_DETAIL_URL = "https://api.bilibili.com/x/web-interface/view"
 MIXIN_KEY_ORDER = (
     46,
     47,
@@ -138,6 +139,34 @@ def get_wbi_keys(session, timeout=15, request_stage=None):
         raise UploaderClientError("无法获取 UP 投稿请求签名") from error
 
 
+def _fetch_video_stat(session, bvid, timeout, request_stage=None):
+    try:
+        response = session.get(
+            f"{VIDEO_DETAIL_URL}?{urlencode({'bvid': bvid})}",
+            impersonate="firefox",
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except RequestException as error:
+        raise _request_error(error, request_stage) from error
+    except ValueError as error:
+        raise UploaderClientError("视频指标响应无效") from error
+    if not isinstance(payload, dict):
+        raise UploaderClientError("视频指标响应无效")
+    code = payload.get("code")
+    if code != 0:
+        codes = {-352: "RISK_CONTROL", -404: "NOT_FOUND", -403: "RESTRICTED"}
+        error_code = codes.get(code, "API_ERROR")
+        if error_code == "RISK_CONTROL" and request_stage is not None:
+            error_code = f"{request_stage}_RISK_CONTROL"
+        raise UploaderClientError("视频指标暂时不可用", error_code)
+    stat = (payload.get("data") or {}).get("stat")
+    if not isinstance(stat, dict):
+        raise UploaderClientError("视频指标响应无效")
+    return stat
+
+
 def _fetch_with_session(
     session,
     uploader_id,
@@ -187,12 +216,22 @@ def _fetch_with_session(
         raise UploaderClientError("UP 历史投稿暂时不可用", error_code)
     data = payload.get("data") or {}
     videos = (data.get("list") or {}).get("vlist") or []
+    enriched_videos = []
+    for video in videos:
+        enriched = dict(video)
+        enriched["stat"] = _fetch_video_stat(
+            session,
+            enriched["bvid"],
+            timeout,
+            request_stage,
+        )
+        enriched_videos.append(enriched)
     page_data = data.get("page") or {}
     total = int(page_data.get("count") or len(videos))
     current_page = int(page_data.get("pn") or page)
     size = int(page_data.get("ps") or page_size)
     return {
-        "videos": videos,
+        "videos": enriched_videos,
         "next_cursor": current_page + 1,
         "has_more": current_page * size < total,
         "total": total,

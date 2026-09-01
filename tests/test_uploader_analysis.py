@@ -131,6 +131,26 @@ def test_task_is_unique_and_page_save_advances_cursor(tmp_path):
     assert len(detail["videos"]) == 2
 
 
+def test_paused_collection_task_resumes_from_saved_cursor(tmp_path):
+    database_path = tmp_path / "ranking.db"
+    now = datetime(2026, 8, 28, tzinfo=UTC)
+    _seed_profile(database_path, now)
+    task_id = create_collection_task(123, database_path, now=now)
+    with connect_database(database_path) as connection:
+        connection.execute(
+            "UPDATE uploader_collection_tasks SET status='PAUSED',cursor=21 "
+            "WHERE id=?",
+            (task_id,),
+        )
+
+    resumed_id = create_collection_task(123, database_path, now=now)
+    detail = get_uploader_detail(123, database_path)
+
+    assert resumed_id == task_id
+    assert detail["task"]["status"] == "RUNNING"
+    assert detail["task"]["cursor"] == 21
+
+
 def test_self_history_and_ranking_analysis_are_sample_aware():
     videos = [
         {"bvid": "A", "views": 100, "published_at": "2026-01-01T00:00:00+00:00"},
@@ -164,7 +184,7 @@ def test_wbi_signing_and_fixed_page_response():
     assert signed["keyword"] == "abcd"
     assert len(signed["w_rid"]) == 32
     calls = []
-    response = SimpleNamespace(
+    list_response = SimpleNamespace(
         raise_for_status=lambda: None,
         json=lambda: {
             "code": 0,
@@ -174,10 +194,16 @@ def test_wbi_signing_and_fixed_page_response():
             },
         },
     )
+    detail_response = SimpleNamespace(
+        raise_for_status=lambda: None,
+        json=lambda: {"code": 0, "data": {"stat": _raw_video()["stat"]}},
+    )
 
     def get(url, **kwargs):
         calls.append((url, kwargs))
-        return response
+        if "/x/web-interface/view?" in url:
+            return detail_response
+        return list_response
 
     page = fetch_uploader_page(
         123,
@@ -188,6 +214,67 @@ def test_wbi_signing_and_fixed_page_response():
     assert page["videos"][0]["bvid"] == "BV1UP"
     assert page["has_more"] is False
     assert "w_rid=" in calls[0][0]
+    assert page["videos"][0]["stat"]["like"] == 100
+    assert "/x/web-interface/view?bvid=BV1UP" in calls[1][0]
+
+
+def test_page_save_maps_list_comment_and_video_review(tmp_path):
+    database_path = tmp_path / "ranking.db"
+    now = datetime(2026, 8, 28, tzinfo=UTC)
+    _seed_profile(database_path, now)
+    task_id = create_collection_task(123, database_path, now=now)
+    video = _raw_video()
+    video.pop("stat")
+    video.update({"play": 321, "comment": 12, "video_review": 34})
+
+    save_uploader_page(
+        task_id,
+        123,
+        [video],
+        2,
+        False,
+        now,
+        database_path,
+    )
+
+    saved = get_uploader_detail(123, database_path)["videos"][0]
+    assert saved["views"] == 321
+    assert saved["comments"] == 12
+    assert saved["danmaku"] == 34
+    assert saved["likes"] == 0
+
+
+def test_video_detail_api_error_does_not_return_zero_metrics():
+    list_response = SimpleNamespace(
+        raise_for_status=lambda: None,
+        json=lambda: {
+            "code": 0,
+            "data": {
+                "list": {"vlist": [_raw_video()]},
+                "page": {"count": 1, "ps": 30, "pn": 1},
+            },
+        },
+    )
+    detail_response = SimpleNamespace(
+        raise_for_status=lambda: None,
+        json=lambda: {"code": -352, "message": "blocked"},
+    )
+
+    def get(url, **_kwargs):
+        if "/x/web-interface/view?" in url:
+            return detail_response
+        return list_response
+
+    try:
+        fetch_uploader_page(
+            123,
+            session=SimpleNamespace(get=get),
+            wbi_keys=("a" * 32, "b" * 32),
+        )
+    except UploaderClientError as error:
+        assert error.error_code == "RISK_CONTROL"
+    else:
+        raise AssertionError("detail API error should fail the page")
 
 
 def test_collection_retries_transient_errors_and_resumes_pages(tmp_path):
@@ -217,6 +304,33 @@ def test_collection_retries_transient_errors_and_resumes_pages(tmp_path):
     assert result["status"] == "SUCCEEDED"
     assert attempts == [1, 1, 1, 2]
     assert waits[:2] == [1, 2]
+
+
+def test_collection_pauses_when_page_batch_limit_is_reached(tmp_path):
+    database_path = tmp_path / "ranking.db"
+    now = datetime(2026, 8, 28, tzinfo=UTC)
+    _seed_profile(database_path, now)
+
+    def fetch_page(_uploader_id, page):
+        return {
+            "videos": [_raw_video(f"BV{page}UP")],
+            "next_cursor": page + 1,
+            "has_more": True,
+        }
+
+    result = collect_uploader_history(
+        123,
+        database_path,
+        fetch_page=fetch_page,
+        sleep=lambda _seconds: None,
+        now=lambda: now,
+        max_pages=2,
+    )
+    detail = get_uploader_detail(123, database_path)
+
+    assert result["status"] == "PAUSED"
+    assert detail["task"]["status"] == "PAUSED"
+    assert detail["task"]["cursor"] == 3
 
 
 def test_http_412_is_reported_as_risk_control():

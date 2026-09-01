@@ -28,7 +28,9 @@ def build_uploader_ui() -> Tag:
             ),
             ui.div(
                 ui.input_select("uploader_select", "选择已上榜 UP", choices={}),
-                ui.input_action_button("uploader_collect", "采集或更新历史投稿"),
+                ui.input_action_button(
+                    "uploader_collect", "采集、继续或更新历史投稿"
+                ),
                 class_="uploader-controls",
             ),
             class_="uploader-header dashboard-panel",
@@ -78,6 +80,8 @@ def uploader_view_model(page_data):
     count = int(analysis.get("video_count") or 0)
     if task.get("status") == "RUNNING":
         collection_message = "历史投稿数据获取中，请勿重复点击。"
+    elif task.get("status") == "PAUSED":
+        collection_message = "本批采集已完成，仍有历史投稿，可继续采集。"
     elif task.get("status") == "FAILED":
         collection_message = ERROR_LABELS.get(
             task.get("error_code"), "历史投稿采集失败，请稍后重试。"

@@ -9,6 +9,7 @@ from .ui import (
     render_uploader_metrics,
     render_uploader_profile,
     render_uploader_videos,
+    render_uploader_visualization,
     uploader_view_model,
 )
 
@@ -36,7 +37,11 @@ def register_uploader_server(input, output, session, database_path, service):
     @reactive.calc
     def view():
         tick.get()
-        data = build_uploader_page_data(input.uploader_select(), database_path)
+        data = build_uploader_page_data(
+            input.uploader_select(),
+            database_path,
+            metric=input.uploader_metric(),
+        )
         return uploader_view_model(data)
 
     @render.ui
@@ -46,6 +51,10 @@ def register_uploader_server(input, output, session, database_path, service):
     @render.ui
     def uploader_metrics():
         return render_uploader_metrics(view())
+
+    @render.ui
+    def uploader_visualization():
+        return render_uploader_visualization(view())
 
     @render.ui
     def uploader_videos():

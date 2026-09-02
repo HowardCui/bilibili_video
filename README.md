@@ -169,6 +169,8 @@ python -m automation.ranking_once --json
 
 ## 后台运行日志
 
+日志字段、状态判断、Cookie 后备说明和日常排查命令请参阅[后台日志说明](docs/后台日志说明.md)。
+
 Web、排行榜采集和单次采集包装分别写入：
 
 ```text

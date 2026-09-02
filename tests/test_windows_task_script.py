@@ -7,14 +7,9 @@ SCRIPT_PATH = PROJECT_ROOT / "scripts" / "manage_ranking_task.ps1"
 TASK_NAMESPACE = {"task": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
 
 
-def _existing_python():
-    local = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
-    if local.exists():
-        return local
-    return PROJECT_ROOT.parents[1] / ".venv" / "Scripts" / "python.exe"
-
-
-def test_windows_task_preview_uses_project_venv_and_beijing_triggers():
+def test_windows_task_preview_uses_project_venv_and_beijing_triggers(tmp_path):
+    python_path = tmp_path / "python.exe"
+    python_path.touch()
     completed = subprocess.run(
         [
             "powershell.exe",
@@ -28,7 +23,7 @@ def test_windows_task_preview_uses_project_venv_and_beijing_triggers():
             "-ProjectRoot",
             str(PROJECT_ROOT),
             "-PythonPath",
-            str(_existing_python()),
+            str(python_path),
         ],
         capture_output=True,
         text=True,
@@ -57,6 +52,6 @@ def test_windows_task_preview_uses_project_venv_and_beijing_triggers():
     working_directory = root.findtext(
         ".//task:Exec/task:WorkingDirectory", namespaces=TASK_NAMESPACE
     )
-    assert command == str(_existing_python())
+    assert command == str(python_path)
     assert arguments == "-m automation.ranking_once --json"
     assert working_directory == str(PROJECT_ROOT)

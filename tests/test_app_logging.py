@@ -59,6 +59,7 @@ def test_log_redacts_credentials_headers_signatures_and_private_paths(tmp_path):
 
     message = _read_json_lines(tmp_path / "automation.log")[0]["message"]
     assert "secret" not in message
+    assert "abc" not in message
     assert "my-key" not in message
     assert "signature" not in message
     assert "alice" not in message

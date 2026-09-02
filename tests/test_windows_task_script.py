@@ -55,3 +55,34 @@ def test_windows_task_preview_uses_project_venv_and_beijing_triggers(tmp_path):
     assert command == str(python_path)
     assert arguments == "-m automation.ranking_once --json"
     assert working_directory == str(PROJECT_ROOT)
+
+
+def test_windows_task_preview_defaults_to_repository_root(tmp_path):
+    python_path = tmp_path / "python.exe"
+    python_path.touch()
+    completed = subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(SCRIPT_PATH),
+            "-Action",
+            "Preview",
+            "-PythonPath",
+            str(python_path),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert not completed.stdout.lstrip().startswith("<?xml")
+    root = ET.fromstring(completed.stdout.lstrip("\ufeff"))
+    working_directory = root.findtext(
+        ".//task:Exec/task:WorkingDirectory", namespaces=TASK_NAMESPACE
+    )
+    assert working_directory == str(PROJECT_ROOT)

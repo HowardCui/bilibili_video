@@ -5,12 +5,16 @@ param(
 
     [string]$TaskName = 'Bilibili Ranking Collection',
 
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot,
 
     [string]$PythonPath
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $ProjectRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+}
 
 function Resolve-TaskPaths {
     $resolvedProject = (Resolve-Path -LiteralPath $ProjectRoot).Path
@@ -53,7 +57,6 @@ function New-RankingTaskXml {
     }
 
     return @"
-<?xml version="1.0" encoding="UTF-8"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Description>Run Bilibili ranking collection at 00, 06, 12 and 18 Asia/Shanghai.</Description>

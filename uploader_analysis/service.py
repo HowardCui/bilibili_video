@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from statistics import mean, median
 from threading import Lock, Thread
 
+from app_logging import get_logger, log_event
 from uploader_analysis.client import UploaderClientError, fetch_uploader_page
 from uploader_analysis.repository import (
     create_collection_task,
@@ -24,6 +25,7 @@ METRIC_KEYS = (
     "danmaku",
     "shares",
 )
+LOGGER = get_logger("uploader.service")
 
 
 def calculate_uploader_analysis(videos, ranked_bvids):
@@ -120,6 +122,15 @@ def collect_uploader_history(
     detail = get_uploader_detail(uploader_id, database_path)
     cursor = int(detail["task"]["cursor"])
     pages_saved = 0
+    started = time.monotonic()
+    log_event(
+        LOGGER,
+        "INFO",
+        "uploader_collection_started",
+        "UP 历史投稿采集开始",
+        task_type="uploader",
+        task_id=task_id,
+    )
     try:
         while pages_saved < max_pages:
             page = None
@@ -152,7 +163,24 @@ def collect_uploader_history(
                 database_path,
             )
             pages_saved += 1
+            log_event(
+                LOGGER,
+                "INFO",
+                "uploader_page_saved",
+                f"UP 历史投稿第 {cursor} 页已保存",
+                task_type="uploader",
+                task_id=task_id,
+            )
             if not page["has_more"]:
+                log_event(
+                    LOGGER,
+                    "INFO",
+                    "uploader_collection_succeeded",
+                    "UP 历史投稿采集完成",
+                    task_type="uploader",
+                    task_id=task_id,
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                )
                 return {
                     "task_id": task_id,
                     "status": "SUCCEEDED",
@@ -161,12 +189,39 @@ def collect_uploader_history(
             cursor = page["next_cursor"]
             sleep(random.uniform(1.0, 2.0))
         pause_collection_task(task_id, current_time(), database_path)
+        log_event(
+            LOGGER,
+            "INFO",
+            "uploader_collection_paused",
+            "UP 历史投稿本批采集完成，可继续采集",
+            task_type="uploader",
+            task_id=task_id,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         return {"task_id": task_id, "status": "PAUSED", "pages_saved": pages_saved}
     except UploaderClientError as error:
         fail_collection_task(task_id, error.error_code, database_path)
+        log_event(
+            LOGGER,
+            "ERROR",
+            "uploader_collection_failed",
+            f"UP 历史投稿采集失败：{error.error_code}",
+            task_type="uploader",
+            task_id=task_id,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         return {"task_id": task_id, "status": "FAILED", "error_code": error.error_code}
     except Exception:
         fail_collection_task(task_id, "UNEXPECTED", database_path)
+        log_event(
+            LOGGER,
+            "ERROR",
+            "uploader_collection_failed",
+            "UP 历史投稿采集出现未预期错误",
+            task_type="uploader",
+            task_id=task_id,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
         return {"task_id": task_id, "status": "FAILED", "error_code": "UNEXPECTED"}
 
 

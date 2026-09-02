@@ -4,8 +4,14 @@
 """Ranking Collector 命令行启动入口。"""
 
 import argparse
-import logging
 
+from app_logging import (
+    configure_logging as configure_project_logging,
+)
+from app_logging import (
+    get_logger,
+    log_event,
+)
 from ranking_collector.config import DATABASE_PATH
 from ranking_collector.models import ComparisonSource, ComparisonStatus
 from ranking_collector.scheduler import RankingScheduler
@@ -15,16 +21,12 @@ from ranking_collector.service import (
     run_scheduled_collection,
 )
 
-
-logger = logging.getLogger(__name__)
+logger = get_logger("ranking.pipeline")
 
 
 def configure_logging():
-    """配置命令行运行时的基础日志格式。"""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
+    """配置排行榜命令行的统一结构化日志。"""
+    return configure_project_logging("ranking")
 
 
 def parse_arguments(arguments=None):
@@ -217,10 +219,22 @@ def main(arguments=None):
         run_schedule()
         return 0
     except KeyboardInterrupt:
-        logger.info("收到停止信号，Ranking Collector 已退出")
+        log_event(
+            logger,
+            "INFO",
+            "ranking_process_stopped",
+            "收到停止信号，Ranking Collector 已退出",
+            task_type="ranking",
+        )
         return 0
     except Exception:
-        logger.exception("Ranking Collector 运行失败")
+        log_event(
+            logger,
+            "ERROR",
+            "ranking_process_failed",
+            "Ranking Collector 运行失败",
+            task_type="ranking",
+        )
         return 1
 
 

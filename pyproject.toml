@@ -52,6 +52,7 @@ Issues = "https://github.com/HowardCui/summary_video/issues"
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
+    "app_logging*",
     "automation*",
     "ranking_collector*",
     "uploader_analysis*",
@@ -70,6 +71,7 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = [
+    "app_logging",
     "automation",
     "ranking_collector",
     "summarization",

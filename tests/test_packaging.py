@@ -31,6 +31,9 @@ def test_built_wheel_contains_web_static_css(tmp_path):
         wheel_entries = set(wheel.namelist())
 
     assert {
+        "app_logging/__init__.py",
+        "app_logging/config.py",
+        "app_logging/sanitization.py",
         "web_app/www/animations.css",
         "web_app/www/layout.css",
         "web_app/www/tokens.css",

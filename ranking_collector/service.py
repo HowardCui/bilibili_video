@@ -7,6 +7,7 @@ import random
 import time
 from datetime import datetime
 
+from app_logging import get_logger, log_event
 from ranking_collector.config import (
     DATABASE_PATH,
     PARTITIONS,
@@ -43,6 +44,7 @@ class CollectionServiceError(RuntimeError):
 
 PARTITION_DELAY_MIN_SECONDS = 8.0
 PARTITION_DELAY_MAX_SECONDS = 15.0
+LOGGER = get_logger("ranking.service")
 
 
 def wait_between_partitions():
@@ -321,6 +323,15 @@ def collect_once(
 
     initialize_database(database_path)
     run_id = create_collection_run(collected_at, database_path)
+    started = time.monotonic()
+    log_event(
+        LOGGER,
+        "INFO",
+        "ranking_collection_started",
+        "排行榜采集开始",
+        task_type="ranking",
+        run_id=run_id,
+    )
     partition_results = []
     failure_messages = []
 
@@ -354,6 +365,15 @@ def collect_once(
                 snapshot,
             )
             result = collection_success(snapshot)
+            log_event(
+                LOGGER,
+                "INFO",
+                "ranking_partition_succeeded",
+                f"分区采集成功，保存 {len(snapshot.items)} 条",
+                task_type="ranking",
+                run_id=run_id,
+                partition=partition_name,
+            )
         except Exception as error:
             error_message = str(error) or error.__class__.__name__
             result = collection_failure(
@@ -380,6 +400,15 @@ def collect_once(
                 comparison = None
             failure_messages.append(
                 f"{partition_name}: {error_message}"
+            )
+            log_event(
+                LOGGER,
+                "ERROR",
+                "ranking_partition_failed",
+                "分区采集失败",
+                task_type="ranking",
+                run_id=run_id,
+                partition=partition_name,
             )
 
         partition_results.append(
@@ -415,6 +444,15 @@ def collect_once(
         succeeded=succeeded,
         error_message=error_message,
         database_path=database_path,
+    )
+    log_event(
+        LOGGER,
+        "INFO" if succeeded else "WARNING",
+        "ranking_collection_finished",
+        "排行榜采集完成" if succeeded else "排行榜采集部分或全部失败",
+        task_type="ranking",
+        run_id=run_id,
+        duration_ms=round((time.monotonic() - started) * 1000),
     )
 
     return {

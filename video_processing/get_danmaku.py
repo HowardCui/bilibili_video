@@ -8,10 +8,13 @@ from pathlib import Path
 
 import yt_dlp
 
+from app_logging import get_logger, log_event
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DANMAKU_DIR = BASE_DIR / "data" / "danmaku"
 DEFAULT_COOKIE_FILE = BASE_DIR / ".secrets" / "bilibili_cookies.txt"
 DANMAKU_CACHE_MAX_AGE_HOURS = 168
+LOGGER = get_logger("danmaku.download")
 
 
 def _cookie_file():
@@ -95,20 +98,54 @@ def download_danmaku(
             max_age_hours=max_age_hours,
         )
         if cached is not None:
+            log_event(
+                LOGGER,
+                "INFO",
+                "danmaku_cache_hit",
+                "复用有效弹幕缓存",
+                task_type="danmaku",
+                task_id=video_id,
+            )
             return cached
 
     try:
-        return _download(url.strip(), raw_info, output_dir)
+        result = _download(url.strip(), raw_info, output_dir)
+        log_event(
+            LOGGER,
+            "INFO",
+            "danmaku_download_succeeded",
+            "匿名弹幕下载完成",
+            task_type="danmaku",
+            task_id=video_id,
+        )
+        return result
     except Exception as anonymous_error:
+        log_event(
+            LOGGER,
+            "WARNING",
+            "danmaku_anonymous_failed",
+            "匿名弹幕下载失败，检查 Cookie 后备",
+            task_type="danmaku",
+            task_id=video_id,
+        )
         cookie_file = _cookie_file()
         if cookie_file is None:
             raise anonymous_error
-        return _download(
+        result = _download(
             url.strip(),
             raw_info,
             output_dir,
             cookie_file=cookie_file,
         )
+        log_event(
+            LOGGER,
+            "INFO",
+            "danmaku_cookie_succeeded",
+            "Cookie 后备弹幕下载完成",
+            task_type="danmaku",
+            task_id=video_id,
+        )
+        return result
 
 
 __all__ = ["build_danmaku_options", "download_danmaku"]

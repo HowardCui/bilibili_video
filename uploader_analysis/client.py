@@ -7,11 +7,13 @@ from urllib.parse import urlencode, urlparse
 
 from curl_cffi.requests.exceptions import RequestException
 
+from app_logging import get_logger, log_event
 from ranking_collector.client import get_cookie_session, get_shared_session
 
 NAV_URL = "https://api.bilibili.com/x/web-interface/nav"
 UPLOADER_VIDEO_URL = "https://api.bilibili.com/x/space/wbi/arc/search"
 VIDEO_DETAIL_URL = "https://api.bilibili.com/x/web-interface/view"
+LOGGER = get_logger("uploader.client")
 MIXIN_KEY_ORDER = (
     46,
     47,
@@ -270,6 +272,14 @@ def fetch_uploader_page(
         cookie_session = get_cookie_session()
         if cookie_session is None:
             raise
+        log_event(
+            LOGGER,
+            "WARNING",
+            "uploader_cookie_fallback",
+            "UP 投稿匿名请求失败，改用 Cookie 后备",
+            task_type="uploader",
+            task_id=uploader_id,
+        )
         return _fetch_with_session(
             cookie_session,
             uploader_id,

@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import Condition, Event, RLock
 from urllib.parse import urlsplit
 
+from app_logging import get_logger, log_event
 from web_app.errors import public_error_from_exception, public_summary_result
 from web_app.summary.repository import (
     RepositoryError,
@@ -30,6 +31,7 @@ _WORKER_STORAGE_ATTEMPTS = 3
 _WORKER_RECOVERY_RESCHEDULES = 2
 
 _LOGGER = logging.getLogger(__name__)
+EVENT_LOGGER = get_logger("summary.service")
 
 
 class _WorkerStorageError(RuntimeError):
@@ -451,6 +453,14 @@ class SummaryTaskService:
             return None
         except _WorkerStorageError:
             return ("execute", ())
+        log_event(
+            EVENT_LOGGER,
+            "INFO",
+            "summary_task_started",
+            "视频总结任务开始",
+            task_type="summary",
+            task_id=task_id,
+        )
 
         def report_stage(stage):
             self._worker_transition(
@@ -461,6 +471,14 @@ class SummaryTaskService:
                 None,
                 None,
                 self._database_path,
+            )
+            log_event(
+                EVENT_LOGGER,
+                "INFO",
+                "summary_stage_changed",
+                f"视频总结进入阶段 {stage}",
+                task_type="summary",
+                task_id=task_id,
             )
 
         try:
@@ -486,6 +504,14 @@ class SummaryTaskService:
                 return None
             except _WorkerStorageError:
                 return ("transition", failure_arguments)
+            log_event(
+                EVENT_LOGGER,
+                "ERROR",
+                "summary_task_failed",
+                f"视频总结任务失败：{code}",
+                task_type="summary",
+                task_id=task_id,
+            )
             return None
 
         success_arguments = (
@@ -503,6 +529,14 @@ class SummaryTaskService:
             return None
         except _WorkerStorageError:
             return ("transition", success_arguments)
+        log_event(
+            EVENT_LOGGER,
+            "INFO",
+            "summary_task_succeeded",
+            "视频总结任务完成",
+            task_type="summary",
+            task_id=task_id,
+        )
         return None
 
 

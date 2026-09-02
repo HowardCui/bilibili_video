@@ -5,9 +5,11 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from app_logging import configure_logging, get_logger, log_event
 from ranking_collector.config import DATABASE_PATH
 from ranking_collector.repository import (
     get_enabled_partition_names,
@@ -18,6 +20,7 @@ from .reports import format_json_report, format_text_report, safe_error_message
 
 DEFAULT_TIMEOUT_SECONDS = 300
 DEFAULT_STALE_MINUTES = 30
+LOGGER = get_logger("automation.ranking_once")
 
 
 def acquire_process_lock(lock_path):
@@ -332,10 +335,29 @@ def parse_arguments(arguments=None):
 
 def main(arguments=None):
     options = parse_arguments(arguments)
+    configure_logging("automation", console_enabled=not options.json)
+    started = time.monotonic()
+    log_event(
+        LOGGER,
+        "INFO",
+        "automation_started",
+        "排行榜单次采集包装开始",
+        task_type="automation",
+    )
     result = run_ranking_once(
         database_path=options.database,
         timeout=options.timeout,
         stale_after=timedelta(minutes=options.stale_after_minutes),
+    )
+    status = result["status"]
+    log_event(
+        LOGGER,
+        "INFO" if status == "SUCCEEDED" else "WARNING",
+        "automation_finished",
+        f"排行榜单次采集包装结束：{status}",
+        task_type="automation",
+        run_id=result.get("run_id"),
+        duration_ms=round((time.monotonic() - started) * 1000),
     )
     formatter = format_json_report if options.json else format_text_report
     print(formatter(result))

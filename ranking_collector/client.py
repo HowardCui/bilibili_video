@@ -15,8 +15,8 @@ from urllib.parse import urlencode
 from curl_cffi import requests
 from curl_cffi.requests.exceptions import RequestException
 
+from app_logging import get_logger, log_event
 from ranking_collector.config import API_URL, BASE_DIR, TOP_N
-
 
 DEFAULT_TIMEOUT = 15
 MAX_RISK_RETRIES = 1
@@ -40,6 +40,7 @@ REQUEST_HEADERS = {
 
 _shared_session = None
 _cookie_session = None
+LOGGER = get_logger("ranking.client")
 
 
 class RankingClientError(RuntimeError):
@@ -256,6 +257,13 @@ def fetch_ranking(
         cookie_session = get_cookie_session()
         if cookie_session is None:
             raise
+        log_event(
+            LOGGER,
+            "WARNING",
+            "ranking_cookie_fallback",
+            "排行榜匿名请求失败，改用 Cookie 后备",
+            task_type="ranking",
+        )
         return _fetch_ranking_with_session(
             cookie_session,
             rid,

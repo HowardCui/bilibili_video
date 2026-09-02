@@ -5,6 +5,7 @@ from pathlib import Path
 
 from shiny import App
 
+from app_logging import configure_logging, get_logger, log_event
 from ranking_collector.config import DATABASE_PATH
 from ranking_collector.repository import initialize_database
 from uploader_analysis.repository import (
@@ -21,6 +22,7 @@ from .summary.service import SummaryTaskService
 from .uploader.server import register_uploader_server
 
 STATIC_ASSETS = Path(__file__).parent / "www"
+LOGGER = get_logger("web.app")
 
 
 def create_app(
@@ -60,6 +62,13 @@ def create_app(
             )
 
     def shutdown_services():
+        log_event(
+            LOGGER,
+            "INFO",
+            "web_stopping",
+            "Web 服务正在停止",
+            task_type="web",
+        )
         summary_service.shutdown()
         uploader_service.shutdown()
 
@@ -74,7 +83,25 @@ def create_app(
 
 def main() -> None:
     """Run the application on its fixed local-only address."""
-    create_app().run(host=HOST, port=PORT)
+    configure_logging("web")
+    log_event(
+        LOGGER,
+        "INFO",
+        "web_started",
+        f"Web 服务启动于 {HOST}:{PORT}",
+        task_type="web",
+    )
+    try:
+        create_app().run(host=HOST, port=PORT)
+    except Exception:
+        log_event(
+            LOGGER,
+            "ERROR",
+            "web_failed",
+            "Web 服务因未处理异常退出",
+            task_type="web",
+        )
+        raise
 
 
 if __name__ == "__main__":

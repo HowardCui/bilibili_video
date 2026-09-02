@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 
+from app_logging import configure_logging
 from ranking_collector.config import DATABASE_PATH
 from ranking_collector.service import collect_once
 
@@ -15,6 +16,7 @@ def parse_arguments(arguments=None):
 
 def main(arguments=None):
     options = parse_arguments(arguments)
+    configure_logging("ranking")
     result = collect_once(database_path=options.database)
     return 0 if result["succeeded"] else 1
 

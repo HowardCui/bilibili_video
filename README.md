@@ -167,6 +167,55 @@ python -m automation.ranking_once --json
 
 不要同时运行该包装入口、原有 `--once` 和 `--schedule`。周期执行应只选择 Codex 自动化或 Windows 任务计划程序中的一种。
 
+## 后台运行日志
+
+Web、排行榜采集和单次采集包装分别写入：
+
+```text
+logs/web.log
+logs/ranking.log
+logs/automation.log
+```
+
+每行是一条 UTF-8 JSON 日志，时间统一使用北京时间并带 `+08:00`。日志按大小轮转，单文件上限 5 MB，每类保留 5 份历史文件。日志初始化失败时程序继续运行，并退回控制台输出；日志不替代 SQLite 中的任务和结果记录。
+
+常用检查命令：
+
+```powershell
+Get-Content .\logs\web.log -Tail 100
+Get-Content .\logs\ranking.log -Tail 100 -Wait
+Select-String -Path .\logs\*.log* -Pattern '"level": "ERROR"|"level": "WARNING"'
+Select-String -Path .\logs\*.log* -Pattern '"task_id": "任务ID"|"run_id": 运行ID'
+```
+
+日志不会记录 Cookie、API Key、Authorization、WBI 签名、完整请求头、字幕正文、弹幕正文或模型完整输入输出。`logs/` 已加入 `.gitignore`。
+
+### Windows 任务计划程序
+
+管理脚本使用项目 `.venv`，按北京时间每天 `00:00、06:00、12:00、18:00` 调用现有单次包装入口。首次使用先预览任务 XML：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\manage_ranking_task.ps1 -Action Preview
+```
+
+确认项目路径、Python 路径和四个 `+08:00` 触发时间正确后安装：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\manage_ranking_task.ps1 -Action Install
+```
+
+查看、立即运行、暂停、重新启用和删除：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\manage_ranking_task.ps1 -Action Status
+powershell -ExecutionPolicy Bypass -File .\scripts\manage_ranking_task.ps1 -Action Run
+powershell -ExecutionPolicy Bypass -File .\scripts\manage_ranking_task.ps1 -Action Disable
+powershell -ExecutionPolicy Bypass -File .\scripts\manage_ranking_task.ps1 -Action Enable
+powershell -ExecutionPolicy Bypass -File .\scripts\manage_ranking_task.ps1 -Action Uninstall
+```
+
+任务采用当前登录用户的最小权限，不保存 Windows 密码；用户未登录时不会运行。`MultipleInstancesPolicy` 设置为 `IgnoreNew`，包装入口仍会使用自己的进程锁和数据库检查。启用 Windows 任务后，应继续保持 Codex 定时自动化暂停。
+
 ## 验证
 
 ```powershell
@@ -182,5 +231,6 @@ python -m ruff check .
 - [x] 第二批：排行榜长期趋势。
 - [x] 第三批：上榜 UP 历史视频分析。
 - [x] 第四批：排行榜单次采集包装、并发保护、超时和数据库结果验证。
+- [x] 第五批：UP 分析数据可视化。
 
 后续目标和验收条件见[下阶段计划](docs/下阶段计划.md)。
